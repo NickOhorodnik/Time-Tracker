@@ -1,0 +1,6 @@
+{
+  "name": "Allonsy Time Tracker",
+  "description": "Україномовна система обліку часу та управління задачами для Allonsy",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

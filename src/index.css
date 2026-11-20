@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+@theme {
+  --color-accent: #C2FF52;
+  --color-bg-1: #161616;
+  --color-bg-2: #0C110C;
+  --color-danger: #FF3D24;
+  --color-fg: #F8F8F8;
+  --color-gray-1: #696969;
+  --color-gray-2: #C6C6C6;
+  --color-border-default: #22252d;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body {
+    background-color: var(--color-bg-2);
+    color: var(--color-fg);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-gray-1) var(--color-bg-2);
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--color-bg-2);
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--color-gray-1);
+    border-radius: 9999px;
+    border: 2px solid var(--color-bg-2);
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-gray-2);
+  }
+
+  *::-webkit-scrollbar-thumb:active {
+    background-color: var(--color-accent);
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: var(--color-bg-2);
+  }
+
+  select,
+  option,
+  optgroup {
+    background-color: var(--color-bg-2);
+    color: var(--color-fg);
+  }
+
+  input[type="range"] {
+    accent-color: var(--color-accent);
+    background-color: transparent;
+    cursor: pointer;
+  }
+
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--color-border-default);
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    margin-top: -5px;
+    border-radius: 9999px;
+    background: var(--color-accent);
+    border: 2px solid var(--color-bg-1);
+  }
+
+  input[type="range"]::-moz-range-track {
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--color-border-default);
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 9999px;
+    background: var(--color-accent);
+    border: 2px solid var(--color-bg-1);
+  }
+}
