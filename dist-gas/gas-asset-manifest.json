@@ -1,6 +1,6 @@
 {
-  "includedImageCount": 1,
-  "totalSourceImageBytes": 2284734,
+  "includedImageCount": 2,
+  "totalSourceImageBytes": 2563010,
   "skippedNonImages": [
     {
       "filename": "Allonsy_________________________Time_Tracker_44d3baf8",
@@ -9,12 +9,12 @@
   ],
   "maxPartialCapBytes": 3150000,
   "appsScriptProjectLimitBytes": 52428800,
-  "totalGeneratedHtmlBytes": 3757001,
-  "totalGasProjectBytes": 3930570,
+  "totalGeneratedHtmlBytes": 4143457,
+  "totalGasProjectBytes": 4317026,
   "generatedFiles": [
     {
       "fileName": "Index.html",
-      "bytes": 641
+      "bytes": 675
     },
     {
       "fileName": "Styles.html",
@@ -22,15 +22,19 @@
     },
     {
       "fileName": "AssetsManifest.html",
-      "bytes": 390
+      "bytes": 647
     },
     {
       "fileName": "Assets_01.html",
       "bytes": 3046507
     },
     {
+      "fileName": "Assets_02.html",
+      "bytes": 371231
+    },
+    {
       "fileName": "AppScript.html",
-      "bytes": 645144
+      "bytes": 660078
     }
   ],
   "assets": [
@@ -41,6 +45,14 @@
       "bytes": 2284734,
       "sha256": "5b15c659de7130b06a53800586d38c3c427e33909308b0bbbdb44b1be7a84fb4",
       "partial": "Assets_01"
+    },
+    {
+      "filename": "image_37bc7574.png",
+      "path": "/assets/aistudio/image_37bc7574.png",
+      "mimeType": "image/png",
+      "bytes": 278276,
+      "sha256": "37bc75748810e59a88b8d800676deed9e5926bdeb99820721afbca507174cd52",
+      "partial": "Assets_02"
     }
   ]
 }

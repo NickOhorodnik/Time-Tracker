@@ -360,6 +360,170 @@ await runTest('SettingsView.tsx renders click-to-copy read-only share links in G
   assert.ok(settingsSrc.includes('Клік для копіювання'));
 });
 
+await runTest('gvizTableToNormalizedObjects + doesGvizTabMatchSchema + worker sheetsByName + 404 JSONP fallback work cleanly', async () => {
+  const parsedWithCols = parserMod.gvizTableToNormalizedObjects({
+    status: 'ok',
+    table: {
+      cols: [
+        { id: 'A', label: 'segment_id', type: 'string' },
+        { id: 'B', label: 'дата', type: 'date' },
+        { id: 'C', label: 'початок_utc', type: 'string' },
+        { id: 'D', label: 'секунд', type: 'number' },
+        { id: 'E', label: 'category_id', type: 'string' },
+        { id: 'F', label: 'опис', type: 'string' },
+      ],
+      rows: [
+        {
+          c: [
+            { v: 'seg-gviz-1' },
+            { v: 'Date(2026,10,20)', f: '2026-11-20' },
+            { v: '2026-11-20T09:00:00.000Z' },
+            { v: 1800, f: '1800' },
+            { v: 'cat-1' },
+            { v: 'JSONP тест' },
+          ],
+        },
+      ],
+    },
+  });
+
+  assert.strictEqual(parserMod.doesGvizTabMatchSchema('Записи', parsedWithCols.headers), true);
+  assert.strictEqual(parserMod.doesGvizTabMatchSchema('Категорії', parsedWithCols.headers), false);
+  assert.strictEqual(parserMod.doesGvizTabMatchSchema('Причини балів', parsedWithCols.headers), false);
+  assert.strictEqual(parsedWithCols.rows.length, 1);
+  assert.strictEqual(parsedWithCols.rows[0].дата, '2026-11-20');
+  assert.strictEqual(parsedWithCols.rows[0].опис, 'JSONP тест');
+
+  // Test Worker raw sheetsByName response transformation inside gasBridge.loadAllData()
+  const sheetId = '1WorkerAndJsonpSheetId1234567890';
+  globalThis.window = {
+    location: {
+      search: `?sheet=${sheetId}`,
+      hash: '',
+      href: `https://time-tracker.allonsy.agency/?sheet=${sheetId}`,
+    },
+    setTimeout,
+    clearTimeout,
+  };
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      ok: true,
+      success: true,
+      spreadsheetId: sheetId,
+      spreadsheetName: 'Worker Sheet',
+      sheetsByName: {
+        'Записи': parsedWithCols.rows,
+        'Категорії': parserMod.csvToNormalizedObjects('id,назва,колір_hex,активна\ncat-1,Дизайн,#10b981,TRUE'),
+        'Налаштування': parserMod.csvToNormalizedObjects('ключ,значення\nhourlyRate,55'),
+      },
+    }),
+  });
+
+  const { gasBridge } = await import(`${pathToFileURL(bridgeBundlePath).href}?v=2`);
+  const workerRes = await gasBridge.loadAllData();
+  assert.strictEqual(workerRes.ok, true);
+  assert.strictEqual(workerRes.spreadsheetName, 'Worker Sheet');
+  assert.strictEqual(workerRes.entries.length, 1);
+  assert.strictEqual(workerRes.entries[0].id, 'seg-gviz-1');
+  assert.strictEqual(workerRes.categories.length, 1);
+  assert.strictEqual(workerRes.settings.hourlyRate, 55);
+
+  // Test HTTP 404 -> automatic JSONP fallback when document is present
+  const headChildren = [];
+  globalThis.document = {
+    head: {
+      appendChild(scriptEl) {
+        headChildren.push(scriptEl);
+        const u = new URL(scriptEl.src);
+        const tqx = u.searchParams.get('tqx') || '';
+        const cbMatch = tqx.match(/responseHandler=([A-Za-z0-9_]+)/);
+        const tabName = u.searchParams.get('sheet');
+        const cb = cbMatch ? globalThis[cbMatch[1]] : null;
+        if (typeof cb === 'function') {
+          if (tabName === 'Записи') {
+            cb({
+              status: 'ok',
+              table: {
+                cols: [
+                  { label: 'segment_id' },
+                  { label: 'дата' },
+                  { label: 'початок_utc' },
+                  { label: 'секунд' },
+                  { label: 'category_id' },
+                  { label: 'опис' },
+                ],
+                rows: [
+                  {
+                    c: [
+                      { v: 'seg-jsonp-99' },
+                      { v: 'Date(2026,10,20)', f: '2026-11-20' },
+                      { v: '2026-11-20T10:00:00.000Z' },
+                      { v: 3600 },
+                      { v: 'cat-1' },
+                      { v: 'Fallback ok' },
+                    ],
+                  },
+                ],
+              },
+            });
+          } else if (tabName === 'Налаштування') {
+            cb({
+              status: 'ok',
+              table: {
+                cols: [{ label: 'ключ' }, { label: 'значення' }],
+                rows: [{ c: [{ v: 'hourlyRate' }, { v: '75' }] }],
+              },
+            });
+          } else {
+            // Simulate Google Sheets silent gid=0 fallback for nonexistent tabs
+            cb({
+              status: 'ok',
+              table: {
+                cols: [
+                  { label: 'segment_id' },
+                  { label: 'дата' },
+                  { label: 'початок_utc' },
+                  { label: 'секунд' },
+                  { label: 'category_id' },
+                  { label: 'опис' },
+                ],
+                rows: [],
+              },
+            });
+          }
+        }
+      },
+    },
+    createElement() {
+      return { src: '', async: true, parentNode: { removeChild() {} } };
+    },
+  };
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 404,
+    json: async () => ({ ok: false, success: false, code: 'NOT_FOUND', error: 'Маршрут не знайдено.' }),
+  });
+
+  const jsonpRes = await gasBridge.loadAllData();
+  assert.strictEqual(jsonpRes.ok, true);
+  assert.strictEqual(jsonpRes.entries.length, 1);
+  assert.strictEqual(jsonpRes.entries[0].id, 'seg-jsonp-99');
+  assert.strictEqual(jsonpRes.settings.hourlyRate, 75);
+  assert.strictEqual(jsonpRes.pointsAudit.schemaReady, false, 'Missing points tabs returning gid=0 must NOT pass schema check');
+  assert.ok(headChildren.length >= 2);
+});
+
+await runTest('worker/gas-proxy.js handles /api/public-sheet-load and enforces READ_ONLY_MODE on /api/gas-proxy', () => {
+  const workerSrc = fs.readFileSync('worker/gas-proxy.js', 'utf8');
+  assert.ok(workerSrc.includes("url.pathname === '/api/public-sheet-load'"));
+  assert.ok(workerSrc.includes("payload?.readOnly === true && !GAS_READ_METHODS.has(method)"));
+  assert.ok(workerSrc.includes("code: 'READ_ONLY_MODE'"));
+  assert.ok(workerSrc.includes("code: 'SHEET_NOT_PUBLIC'"));
+  assert.ok(workerSrc.includes("code: 'SPREADSHEET_NOT_FOUND'"));
+});
+
 console.log(`\nRead-only Share Link Test Summary: ${passedCount} passed, ${failedCount} failed.`);
 if (failedCount > 0) {
   process.exit(1);

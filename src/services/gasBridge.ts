@@ -26,6 +26,12 @@ import {
   parseReadOnlyShareLink,
   ReadOnlyShareConfig,
 } from '../utils/shareLink';
+import {
+  buildPublicSheetLoadResponse,
+  doesGvizTabMatchSchema,
+  GvizQueryResponse,
+  gvizTableToNormalizedObjects,
+} from '../utils/publicSheetParser';
 
 export interface GasBridgeResponse<T = any> {
   ok: boolean;
@@ -191,6 +197,172 @@ function enqueueGasWrite<T>(task: () => Promise<T>): Promise<T> {
   return next;
 }
 
+let gvizJsonpCounter = 0;
+const inFlightPublicJsonpLoads = new Map<string, Promise<GasLoadAllResponse>>();
+
+const PUBLIC_JSONP_CANONICAL_TABS = [
+  'Категорії',
+  'Типи дій',
+  'Проєкти',
+  'Працівники',
+  'Оцінки',
+  'Бонуси',
+  'Отримані бонуси',
+  'Фрази',
+  'Мотиваційні фрази',
+  'Налаштування',
+  'Бібліотека зображень',
+  'Призначення зображень',
+  'Ролі балів',
+  'Профілі балів',
+  'Причини балів',
+  'Операції балів',
+  'Періоди балів',
+  'Доступність бонусів',
+];
+
+function getRecentMonthTabNames(count = 3): string[] {
+  const now = new Date();
+  const list: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    list.push(`${y}-${m}`);
+  }
+  return list;
+}
+
+function fetchGvizTabJsonp(spreadsheetId: string, tabName: string): Promise<GvizQueryResponse> {
+  return new Promise((resolve, reject) => {
+    if (typeof document === 'undefined') {
+      reject(new Error('DOM unavailable'));
+      return;
+    }
+    const cbName = `__allonsyGvizCb_${Date.now()}_${++gvizJsonpCounter}`;
+    const g = globalThis as unknown as Record<string, unknown>;
+    const script = document.createElement('script');
+    let settled = false;
+
+    const cleanup = () => {
+      try {
+        delete g[cbName];
+      } catch {
+        g[cbName] = undefined;
+      }
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    };
+
+    const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error('Timeout loading sheet tab'));
+    }, 12000);
+
+    g[cbName] = (payload: GvizQueryResponse) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      cleanup();
+      resolve(payload);
+    };
+
+    script.onerror = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      cleanup();
+      reject(new Error('Script load failed'));
+    };
+
+    script.async = true;
+    script.src =
+      `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/gviz/tq` +
+      `?tqx=${encodeURIComponent(`out:json;responseHandler=${cbName}`)}` +
+      `&sheet=${encodeURIComponent(tabName)}&headers=1`;
+    (document.head || document.documentElement || document.body).appendChild(script);
+  });
+}
+
+async function loadPublicSheetViaGvizJsonp(spreadsheetId: string): Promise<GasLoadAllResponse> {
+  const existing = inFlightPublicJsonpLoads.get(spreadsheetId);
+  if (existing) return existing;
+
+  const task = (async (): Promise<GasLoadAllResponse> => {
+    try {
+      const entriesRes = await fetchGvizTabJsonp(spreadsheetId, 'Записи');
+      if (!entriesRes || entriesRes.status === 'error') {
+        return {
+          ok: false,
+          success: false,
+          code: 'SHEET_NOT_PUBLIC',
+          error:
+            'Таблиця недоступна для перегляду. Увімкніть у Google Таблиці доступ «Усі, хто має посилання — Переглядач» або поділіться посиланням із параметром &gas=.',
+        };
+      }
+      const parsedEntries = gvizTableToNormalizedObjects(entriesRes);
+      if (!doesGvizTabMatchSchema('Записи', parsedEntries.headers)) {
+        return {
+          ok: false,
+          success: false,
+          code: 'SCHEMA_COMPATIBILITY_BLOCKED',
+          error: 'Канонічний аркуш «Записи» не знайдено в таблиці. Завантаження заблоковано.',
+        };
+      }
+
+      const sheetsByName: Record<string, Record<string, string>[]> = {
+        'Записи': parsedEntries.rows,
+      };
+
+      const remainingTabs = [...PUBLIC_JSONP_CANONICAL_TABS, ...getRecentMonthTabNames(3)];
+      const batchSize = 5;
+      for (let i = 0; i < remainingTabs.length; i += batchSize) {
+        const batch = remainingTabs.slice(i, i + batchSize);
+        const results = await Promise.all(
+          batch.map(async (tabName) => {
+            try {
+              const res = await fetchGvizTabJsonp(spreadsheetId, tabName);
+              if (!res || res.status === 'error') return { tabName, matched: false, rows: [] as Record<string, string>[] };
+              const parsed = gvizTableToNormalizedObjects(res);
+              const matched = doesGvizTabMatchSchema(tabName, parsed.headers);
+              return { tabName, matched, rows: parsed.rows };
+            } catch {
+              return { tabName, matched: false, rows: [] as Record<string, string>[] };
+            }
+          })
+        );
+        for (const item of results) {
+          if (item.matched) {
+            sheetsByName[item.tabName] = item.rows;
+          }
+        }
+      }
+
+      return buildPublicSheetLoadResponse({
+        spreadsheetId,
+        spreadsheetName: 'Google Таблиця (перегляд)',
+        sheetsByName,
+      });
+    } catch {
+      return {
+        ok: false,
+        success: false,
+        code: 'SHEET_NOT_PUBLIC',
+        error:
+          'Таблиця закрита для публічного перегляду або проксі недоступний. Увімкніть у Google Таблиці доступ «Усі, хто має посилання — Переглядач» або скористайтесь посиланням із параметром &gas=.',
+      };
+    } finally {
+      inFlightPublicJsonpLoads.delete(spreadsheetId);
+    }
+  })();
+
+  inFlightPublicJsonpLoads.set(spreadsheetId, task);
+  return task;
+}
+
 async function executePublicSheetRequest<T extends GasBridgeResponse>(
   share: ReadOnlyShareConfig,
   methodName: string
@@ -204,6 +376,20 @@ async function executePublicSheetRequest<T extends GasBridgeResponse>(
     } as T;
   }
 
+  const formatResult = (payload: GasLoadAllResponse): T => {
+    if (methodName === 'gasHealthCheck' && payload.ok) {
+      return {
+        ok: true,
+        success: true,
+        status: 'online',
+        executionMode: 'PUBLIC_READ_ONLY',
+        spreadsheetId: payload.spreadsheetId,
+        spreadsheetName: payload.spreadsheetName,
+      } as unknown as T;
+    }
+    return payload as unknown as T;
+  };
+
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 45000);
   try {
@@ -211,8 +397,20 @@ async function executePublicSheetRequest<T extends GasBridgeResponse>(
       `/api/public-sheet-load?sheet=${encodeURIComponent(share.spreadsheetInput || share.spreadsheetId)}`,
       { method: 'GET', signal: controller.signal }
     );
-    const result = await response.json();
-    if (!result || typeof result !== 'object') {
+    const rawResult = await response.json().catch(() => null);
+
+    // If the edge worker or static host does not expose /api/public-sheet-load (HTTP 404),
+    // fall back to direct public Google Sheets gviz JSONP in the browser.
+    if (
+      response.status === 404 &&
+      (!rawResult || rawResult.code === 'NOT_FOUND') &&
+      typeof document !== 'undefined'
+    ) {
+      const jsonpResult = await loadPublicSheetViaGvizJsonp(share.spreadsheetId);
+      return formatResult(jsonpResult);
+    }
+
+    if (!rawResult || typeof rawResult !== 'object') {
       return {
         ok: false,
         success: false,
@@ -220,19 +418,26 @@ async function executePublicSheetRequest<T extends GasBridgeResponse>(
         error: 'Сервер повернув порожню відповідь при завантаженні таблиці.',
       } as T;
     }
-    if (methodName === 'gasHealthCheck' && result.ok) {
-      return {
-        ok: true,
-        success: true,
-        status: 'online',
-        executionMode: 'PUBLIC_READ_ONLY',
-        spreadsheetId: result.spreadsheetId,
-        spreadsheetName: result.spreadsheetName,
-      } as unknown as T;
+
+    // Worker returns raw { ok, spreadsheetId, spreadsheetName, sheetsByName }; transform client-side.
+    if (rawResult.ok && rawResult.sheetsByName && !rawResult.entries) {
+      const built = buildPublicSheetLoadResponse({
+        spreadsheetId: String(rawResult.spreadsheetId || share.spreadsheetId),
+        spreadsheetName: String(rawResult.spreadsheetName || 'Google Таблиця (перегляд)'),
+        sheetsByName: rawResult.sheetsByName,
+      });
+      return formatResult(built);
     }
-    return result as T;
+
+    return formatResult(rawResult as GasLoadAllResponse);
   } catch (error) {
     const timedOut = error instanceof DOMException && error.name === 'AbortError';
+    if (!timedOut && typeof document !== 'undefined') {
+      const jsonpResult = await loadPublicSheetViaGvizJsonp(share.spreadsheetId);
+      if (jsonpResult.ok) {
+        return formatResult(jsonpResult);
+      }
+    }
     return {
       ok: false,
       success: false,

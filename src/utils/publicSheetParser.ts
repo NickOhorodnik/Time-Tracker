@@ -273,6 +273,113 @@ export function csvToNormalizedObjects(csvText: string): Record<string, string>[
   return out;
 }
 
+export interface GvizQueryResponse {
+  status?: string;
+  errors?: Array<{ reason?: string; message?: string; detailed_message?: string }>;
+  table?: {
+    cols?: Array<{ id?: string; label?: string; type?: string }>;
+    rows?: Array<{ c?: Array<{ v?: unknown; f?: string | null } | null> }>;
+  };
+}
+
+function gvizCellToString(cell: { v?: unknown; f?: string | null } | null | undefined): string {
+  if (!cell) return '';
+  if (cell.f !== undefined && cell.f !== null) return String(cell.f);
+  if (cell.v === undefined || cell.v === null) return '';
+  if (typeof cell.v === 'string') {
+    const dateMatch = cell.v.match(/^Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+))?\)$/);
+    if (dateMatch) {
+      const y = dateMatch[1].padStart(4, '0');
+      const m = String(Number(dateMatch[2]) + 1).padStart(2, '0');
+      const d = dateMatch[3].padStart(2, '0');
+      if (dateMatch[4] !== undefined) {
+        const hh = dateMatch[4].padStart(2, '0');
+        const mm = dateMatch[5].padStart(2, '0');
+        const ss = dateMatch[6].padStart(2, '0');
+        return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
+      }
+      return `${y}-${m}-${d}`;
+    }
+    return cell.v;
+  }
+  return String(cell.v);
+}
+
+export function gvizTableToNormalizedObjects(payload: GvizQueryResponse | null | undefined): {
+  headers: string[];
+  rows: Record<string, string>[];
+} {
+  const cols = payload?.table?.cols || [];
+  const rawRows = payload?.table?.rows || [];
+  if (cols.length === 0 && rawRows.length === 0) {
+    return { headers: [], rows: [] };
+  }
+
+  const colLabels = cols.map((c) => normalizeCsvHeader(c?.label || ''));
+  const hasColLabels = colLabels.some(Boolean);
+
+  let headers = colLabels;
+  let dataStartIndex = 0;
+
+  if (!hasColLabels && rawRows.length > 0) {
+    headers = (rawRows[0]?.c || []).map((cell) => normalizeCsvHeader(gvizCellToString(cell)));
+    dataStartIndex = 1;
+  }
+
+  const out: Record<string, string>[] = [];
+  for (let r = dataStartIndex; r < rawRows.length; r++) {
+    const cells = rawRows[r]?.c || [];
+    const values = headers.map((_h, idx) => gvizCellToString(cells[idx]));
+    if (values.every((v) => !v.trim())) continue;
+    const obj: Record<string, string> = {};
+    for (let c = 0; c < headers.length; c++) {
+      const header = headers[c];
+      if (!header) continue;
+      const cellVal = values[c] || '';
+      obj[header] = cellVal;
+      const lower = header.toLowerCase();
+      if (!(lower in obj)) {
+        obj[lower] = cellVal;
+      }
+    }
+    out.push(obj);
+  }
+
+  return { headers, rows: out };
+}
+
+const GVIZ_TAB_SIGNATURES: Record<string, (lowerHeaders: Set<string>) => boolean> = {
+  'Записи': (h) => h.has('segment_id') || (h.has('дата') && h.has('початок_utc')),
+  'Категорії': (h) => h.has('колір_hex') || h.has('іконка_lucide') || (h.has('колір') && h.has('назва')),
+  'Типи дій': (h) => h.has('назва') && h.has('активна') && !h.has('колір_hex') && !h.has('текст'),
+  'Проєкти': (h) => h.has('назва') && h.has('активний') && !h.has('ціна_балів') && !h.has('variant_id'),
+  'Бонуси': (h) => h.has('ціна_балів') || h.has('вартість_балів') || (h.has('тип') && h.has('image_asset_id')),
+  'Отримані бонуси': (h) => h.has('claim_id') || h.has('дата_запиту_utc'),
+  'Фрази': (h) => h.has('текст') || h.has('last_cycle_id'),
+  'Мотиваційні фрази': (h) => h.has('template') || h.has('шаблон') || (h.has('active') && h.has('order') && !h.has('asset_id')),
+  'Налаштування': (h) => h.has('ключ') && h.has('значення'),
+  'Працівники': (h) => h.has('employee_id') && (h.has('name') || h.has("ім'я") || h.has('role')),
+  'Оцінки': (h) => h.has('rating_id') || h.has('score') || h.has('rated_at_utc'),
+  'Бібліотека зображень': (h) => h.has('asset_id') && (h.has('image_url') || h.has('file_reference') || h.has('display_name') || h.has('folder_path')),
+  'Призначення зображень': (h) => h.has('assignment_id') || h.has('slot_key'),
+  'Ролі балів': (h) => h.has('role_id') || h.has('monthly_base_points'),
+  'Профілі балів': (h) => h.has('points_role') || h.has('monthly_base_override'),
+  'Причини балів': (h) => h.has('reason_id') || h.has('default_points'),
+  'Операції балів': (h) => h.has('transaction_id') || h.has('points_delta'),
+  'Періоди балів': (h) => h.has('period_id') || h.has('base_allocation'),
+  'Доступність бонусів': (h) => h.has('eligibility_id') || h.has('price_override'),
+};
+
+export function doesGvizTabMatchSchema(tabName: string, headers: string[]): boolean {
+  const lowerHeaders = new Set(headers.map((h) => normalizeCsvHeader(h).toLowerCase()).filter(Boolean));
+  if (lowerHeaders.size === 0) return false;
+  if (/^\d{4}-\d{2}$/.test(tabName)) {
+    return GVIZ_TAB_SIGNATURES['Записи'](lowerHeaders);
+  }
+  const checker = GVIZ_TAB_SIGNATURES[tabName];
+  return checker ? checker(lowerHeaders) : false;
+}
+
 function resolveRefUrlClient(
   rawRef: string,
   slotKey: string,
