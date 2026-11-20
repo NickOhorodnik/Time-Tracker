@@ -52,6 +52,7 @@ interface PointsTeamViewProps {
   pointsPeriods: PointsPeriod[];
   pointsAudit: PointsAuditSummary | null;
   syncState: SyncState;
+  isReadOnly?: boolean;
   onAddPointsTransaction: (params: {
     employeeId: string;
     operationType: PointsReasonOperationType;
@@ -84,12 +85,14 @@ export const PointsTeamView: React.FC<PointsTeamViewProps> = ({
   pointsPeriods,
   pointsAudit,
   syncState,
+  isReadOnly = false,
   onAddPointsTransaction,
   onReverseTransaction,
   onEnsureMonthlyAllocations,
   onSyncTimeEarning,
   onClosePeriod,
 }) => {
+  const effectiveReadOnly = isReadOnly || Boolean(syncState?.isReadOnly);
   const activeEmployees = useMemo(() => employees.filter((e) => e.status === 'active'), [employees]);
   const selectableEmployees = activeEmployees.length > 0 ? activeEmployees : employees;
 
@@ -237,6 +240,7 @@ export const PointsTeamView: React.FC<PointsTeamViewProps> = ({
 
   const handleOpenConfirm = (e: React.FormEvent) => {
     e.preventDefault();
+    if (effectiveReadOnly) return;
     setStatusFeedback(null);
     const validation = buildManualAdjustmentTransaction({
       employeeId: selectedEmployeeId,
@@ -259,6 +263,7 @@ export const PointsTeamView: React.FC<PointsTeamViewProps> = ({
   };
 
   const handleConfirmSubmit = async () => {
+    if (effectiveReadOnly) return;
     setIsSubmitting(true);
     try {
       const res = await onAddPointsTransaction({
@@ -290,7 +295,7 @@ export const PointsTeamView: React.FC<PointsTeamViewProps> = ({
 
   const handleConfirmReverse = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reverseTarget) return;
+    if (effectiveReadOnly || !reverseTarget) return;
     if (!reverseComment.trim()) {
       setStatusFeedback({ type: 'error', text: 'Вкажіть обов’язковий коментар для сторнування.' });
       return;
@@ -314,6 +319,7 @@ export const PointsTeamView: React.FC<PointsTeamViewProps> = ({
   };
 
   const handleActionRun = async (fn: () => Promise<{ success: boolean; error?: string; message?: string }>) => {
+    if (effectiveReadOnly) return;
     setIsSubmitting(true);
     setStatusFeedback(null);
     try {
@@ -371,30 +377,44 @@ export const PointsTeamView: React.FC<PointsTeamViewProps> = ({
             ))}
           </select>
 
-          <button
-            type="button"
-            disabled={isSubmitting}
-            onClick={() => handleActionRun(() => onEnsureMonthlyAllocations(currentKyivMonth))}
-            className="px-3.5 py-2 rounded-xl bg-bg-1 hover:bg-border-default border border-border-default text-xs font-medium text-fg flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-          >
-            <CalendarClock className="w-3.5 h-3.5 text-accent" />
-            <span>Нарахувати базу ({currentKyivMonth})</span>
-          </button>
+          {!effectiveReadOnly && (
+            <>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => handleActionRun(() => onEnsureMonthlyAllocations(currentKyivMonth))}
+                className="px-3.5 py-2 rounded-xl bg-bg-1 hover:bg-border-default border border-border-default text-xs font-medium text-fg flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <CalendarClock className="w-3.5 h-3.5 text-accent" />
+                <span>Нарахувати базу ({currentKyivMonth})</span>
+              </button>
 
-          <button
-            type="button"
-            disabled={isSubmitting}
-            onClick={() => handleActionRun(onSyncTimeEarning)}
-            className="px-3.5 py-2 rounded-xl bg-accent/15 hover:bg-accent/25 border border-accent/30 text-xs font-semibold text-accent flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSubmitting ? 'animate-spin' : ''}`} />
-            <span>Синхронізувати бали за час</span>
-          </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => handleActionRun(onSyncTimeEarning)}
+                className="px-3.5 py-2 rounded-xl bg-accent/15 hover:bg-accent/25 border border-accent/30 text-xs font-semibold text-accent flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSubmitting ? 'animate-spin' : ''}`} />
+                <span>Синхронізувати бали за час</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {/* Schema / Authorization / Runtime Notice */}
-      {syncState.runtimeMode === 'gas_hosted' && (
+      {effectiveReadOnly ? (
+        <div className="bg-bg-1 border border-accent/30 rounded-2xl p-4 flex items-start gap-3 text-xs">
+          <Lock className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+          <div className="space-y-1 text-gray-2">
+            <div className="font-semibold text-fg">Режим лише перегляду балів</div>
+            <p className="leading-relaxed">
+              Ви можете переглядати гаманці співробітників, нарахування, списання, самозвіти та журнал операцій. Створення нових операцій, синхронізація балів за час, сторнування та закриття періодів вимкнено.
+            </p>
+          </div>
+        </div>
+      ) : syncState.runtimeMode === 'gas_hosted' && (
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3 text-xs">
           <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div className="space-y-1 text-gray-2">
@@ -470,15 +490,17 @@ export const PointsTeamView: React.FC<PointsTeamViewProps> = ({
             </div>
 
             {!isCurrentPeriodClosed ? (
-              <button
-                type="button"
-                disabled={isSubmitting}
-                onClick={() => handleActionRun(() => onClosePeriod(selectedEmployee.id, currentKyivMonth))}
-                className="px-3.5 py-2 rounded-xl bg-bg-2 hover:bg-border-default border border-border-default text-xs text-gray-2 hover:text-fg flex items-center gap-1.5 cursor-pointer shrink-0"
-              >
-                <Lock className="w-3.5 h-3.5" />
-                <span>Закрити період {currentKyivMonth}</span>
-              </button>
+              !effectiveReadOnly ? (
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => handleActionRun(() => onClosePeriod(selectedEmployee.id, currentKyivMonth))}
+                  className="px-3.5 py-2 rounded-xl bg-bg-2 hover:bg-border-default border border-border-default text-xs text-gray-2 hover:text-fg flex items-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Закрити період {currentKyivMonth}</span>
+                </button>
+              ) : null
             ) : (
               <span className="px-3 py-1.5 rounded-xl bg-bg-2 border border-border-default text-xs text-amber-300 flex items-center gap-1.5 shrink-0">
                 <Lock className="w-3.5 h-3.5" />
@@ -544,7 +566,18 @@ export const PointsTeamView: React.FC<PointsTeamViewProps> = ({
 
       {/* Main Content: Adjustment Form + Ledger */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-        {/* Operation Form */}
+        {/* Operation Form or Read-Only Card */}
+        {effectiveReadOnly ? (
+          <div className="xl:col-span-4 bg-bg-1 border border-border-default rounded-3xl p-5 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-bold text-fg uppercase tracking-wider">
+              <Lock className="w-4 h-4 text-accent" />
+              <span>Лише перегляд</span>
+            </div>
+            <p className="text-xs text-gray-2 leading-relaxed">
+              Ви переглядаєте операції балів за публічним посиланням. Нарахування, списання, самозвіти та сторнування доступні лише власнику таблиці.
+            </p>
+          </div>
+        ) : (
         <form
           onSubmit={handleOpenConfirm}
           className="xl:col-span-5 bg-bg-1 border border-border-default rounded-3xl p-5 space-y-4"
@@ -728,9 +761,10 @@ export const PointsTeamView: React.FC<PointsTeamViewProps> = ({
               : 'Переглянути та підтвердити операцію'}
           </button>
         </form>
+        )}
 
         {/* Ledger History */}
-        <div className="xl:col-span-7 bg-bg-1 border border-border-default rounded-3xl overflow-hidden shadow-xl">
+        <div className={`${effectiveReadOnly ? 'xl:col-span-8' : 'xl:col-span-7'} bg-bg-1 border border-border-default rounded-3xl overflow-hidden shadow-xl`}>
           <div className="p-4 sm:p-5 border-b border-border-default flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="text-sm font-bold text-fg flex items-center gap-2">
               <Filter className="w-4 h-4 text-accent" />
@@ -826,7 +860,7 @@ export const PointsTeamView: React.FC<PointsTeamViewProps> = ({
                         {isPositive ? `+${tx.pointsDelta}` : tx.pointsDelta}
                       </span>
 
-                      {tx.operationType !== 'reversal' && !isReversed && !periodClosed && (
+                      {!effectiveReadOnly && tx.operationType !== 'reversal' && !isReversed && !periodClosed && (
                         <button
                           type="button"
                           onClick={() => {

@@ -133,9 +133,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <>
               <div className="w-2 h-2 rounded-full bg-amber-400 mt-1 shrink-0 animate-pulse" />
               <div className="flex-1 min-w-0 text-[11px]">
-                <div className="font-semibold text-amber-400">GAS • Підключення...</div>
+                <div className="font-semibold text-amber-400">
+                  {syncState.isReadOnly ? 'Перегляд • Завантаження...' : 'GAS • Підключення...'}
+                </div>
                 <div className="text-[10px] text-gray-2 leading-tight mt-0.5">
-                  Завантаження даних із прив’язаної Google Таблиці.
+                  {syncState.isReadOnly
+                    ? 'Завантаження даних спільної Google Таблиці.'
+                    : 'Завантаження даних із прив’язаної Google Таблиці.'}
                 </div>
               </div>
             </>
@@ -143,11 +147,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {syncState.status === 'connected' && (
             <>
-              <div className="w-2 h-2 rounded-full bg-emerald-400 mt-1 shrink-0" />
+              <div className={`w-2 h-2 rounded-full mt-1 shrink-0 ${syncState.isReadOnly ? 'bg-accent' : 'bg-emerald-400'}`} />
               <div className="flex-1 min-w-0 text-[11px]">
-                <div className="font-semibold text-emerald-400">GAS • Підключено</div>
-                <div className="text-[10px] text-gray-2 leading-tight mt-0.5 truncate" title={syncState.spreadsheetName || ''}>
-                  {syncState.spreadsheetName || 'Власна Google Таблиця'} (google.script.run)
+                <div className={`font-semibold ${syncState.isReadOnly ? 'text-accent' : 'text-emerald-400'}`}>
+                  {syncState.isReadOnly ? 'Лише перегляд' : 'GAS • Підключено'}
+                </div>
+                <div className="text-[10px] text-gray-2 leading-tight mt-0.5 truncate" title={syncState.spreadsheetName || syncState.spreadsheetId || ''}>
+                  {syncState.spreadsheetName || syncState.spreadsheetId || 'Google Таблиця'}
+                  {syncState.isReadOnly ? ' • Зміни вимкнено' : ''}
                 </div>
               </div>
             </>

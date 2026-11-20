@@ -43,6 +43,7 @@ interface BonusesViewProps {
   bonusEligibility: BonusEligibilityRule[];
   bonusClaims: BonusClaim[];
   syncState: SyncState;
+  isReadOnly?: boolean;
   onClaimBonusForEmployee: (params: {
     employeeId: string;
     bonusId: string;
@@ -66,10 +67,12 @@ export const BonusesView: React.FC<BonusesViewProps> = ({
   bonusEligibility,
   bonusClaims,
   syncState,
+  isReadOnly = false,
   onClaimBonusForEmployee,
   onTransitionBonusClaim,
   onUpdateBonusImage,
 }) => {
+  const effectiveReadOnly = isReadOnly || Boolean(syncState?.isReadOnly);
   const activeEmployees = useMemo(
     () => employees.filter((e) => e.status === 'active'),
     [employees]
@@ -130,6 +133,7 @@ export const BonusesView: React.FC<BonusesViewProps> = ({
   }, [bonusClaims, claimsScope, selectedEmployee]);
 
   const handleImageUpload = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    if (effectiveReadOnly) return;
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
@@ -144,7 +148,7 @@ export const BonusesView: React.FC<BonusesViewProps> = ({
   };
 
   const handleClaim = async (bonusId: string) => {
-    if (!selectedEmployee) return;
+    if (effectiveReadOnly || !selectedEmployee) return;
     setFeedback(null);
     const qty = Math.max(1, Math.floor(quantities[bonusId] || 1));
     const comment = comments[bonusId] || '';
@@ -175,6 +179,7 @@ export const BonusesView: React.FC<BonusesViewProps> = ({
   };
 
   const handleTransition = async (claimId: string, nextStatus: BonusClaimStatus) => {
+    if (effectiveReadOnly) return;
     setFeedback(null);
     setBusyKey(`transition:${claimId}:${nextStatus}`);
     try {
@@ -272,8 +277,18 @@ export const BonusesView: React.FC<BonusesViewProps> = ({
         </div>
       </div>
 
-      {/* GAS Security Notice for Privileged / Protected Mutations */}
-      {isGasMode && (
+      {/* Read-only or GAS Security Notice */}
+      {effectiveReadOnly ? (
+        <div className="bg-bg-1 border border-accent/30 rounded-2xl p-3.5 sm:p-4 flex items-start gap-3 text-xs">
+          <Lock className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+          <div className="space-y-1 text-gray-2">
+            <div className="font-semibold text-fg">Режим лише перегляду</div>
+            <p className="leading-relaxed">
+              Ви можете переглядати баланс балів, доступні бонуси та історію заявок, але оформлення, погодження, видача й скасування бонусів вимкнені.
+            </p>
+          </div>
+        </div>
+      ) : isGasMode && (
         <div className="bg-bg-1 border border-amber-500/30 rounded-2xl p-3.5 sm:p-4 flex items-start gap-3 text-xs">
           <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div className="space-y-1 text-gray-2">
@@ -399,18 +414,20 @@ export const BonusesView: React.FC<BonusesViewProps> = ({
                       </span>
                     </div>
 
-                    <label
-                      className="absolute bottom-3 right-3 bg-bg-2/90 hover:bg-accent text-gray-2 hover:text-bg-1 p-2 rounded-xl backdrop-blur-md border border-border-default transition-colors cursor-pointer"
-                      title="Змінити зображення бонусу"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleImageUpload(bonus.id, e)}
-                        className="hidden"
-                      />
-                    </label>
+                    {!effectiveReadOnly && (
+                      <label
+                        className="absolute bottom-3 right-3 bg-bg-2/90 hover:bg-accent text-gray-2 hover:text-bg-1 p-2 rounded-xl backdrop-blur-md border border-border-default transition-colors cursor-pointer"
+                        title="Змінити зображення бонусу"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleImageUpload(bonus.id, e)}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
                   </div>
 
                   <div className="p-4 sm:p-5 space-y-2.5">
@@ -437,7 +454,7 @@ export const BonusesView: React.FC<BonusesViewProps> = ({
                 </div>
 
                 <div className="p-4 sm:p-5 pt-0 space-y-3">
-                  {offer.isAvailable && (
+                  {offer.isAvailable && !effectiveReadOnly && (
                     <div className="grid grid-cols-3 gap-2">
                       <div>
                         <label
@@ -484,17 +501,19 @@ export const BonusesView: React.FC<BonusesViewProps> = ({
 
                   <button
                     type="button"
-                    disabled={!canAfford || isClaiming}
+                    disabled={effectiveReadOnly || !canAfford || isClaiming}
                     onClick={() => handleClaim(bonus.id)}
                     className={`w-full py-3 rounded-2xl text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
-                      canAfford && !isClaiming
+                      !effectiveReadOnly && canAfford && !isClaiming
                         ? 'bg-accent hover:bg-accent/90 text-bg-1 shadow-lg shadow-accent/20 cursor-pointer'
                         : 'bg-bg-2 text-gray-1 border border-border-default cursor-not-allowed'
                     }`}
                   >
                     <Gift className="w-4 h-4 shrink-0" />
                     <span>
-                      {isClaiming
+                      {effectiveReadOnly
+                        ? 'Видача вимкнена (лише перегляд)'
+                        : isClaiming
                         ? 'Оформлення...'
                         : !pointsEnabled
                         ? 'Профіль балів вимкнено'
@@ -597,7 +616,7 @@ export const BonusesView: React.FC<BonusesViewProps> = ({
                     )}
                   </div>
 
-                  {claim.status !== 'cancelled' && (
+                  {!effectiveReadOnly && claim.status !== 'cancelled' && (
                     <div className="flex flex-wrap items-center gap-2 shrink-0">
                       {claim.status === 'requested' && (
                         <button

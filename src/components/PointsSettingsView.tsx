@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Gift,
+  Lock,
   Plus,
   Save,
   ShieldCheck,
@@ -35,6 +36,7 @@ interface PointsSettingsViewProps {
   eligibleCategoryIds: string[];
   bonuses: Bonus[];
   eligibilityRules: BonusEligibilityRule[];
+  isReadOnly?: boolean;
   onSaveRolesAndCategories: (
     nextRoles: PointsRoleConfig[],
     nextEligibleCategoryIds: string[]
@@ -55,6 +57,7 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
   eligibleCategoryIds,
   bonuses,
   eligibilityRules,
+  isReadOnly = false,
   onSaveRolesAndCategories,
   onSaveProfiles,
   onSaveEligibility,
@@ -109,6 +112,7 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
     field: K,
     value: PointsRoleConfig[K]
   ) => {
+    if (isReadOnly) return;
     setDraftRoles((prev) => {
       const base = prev.length > 0 ? [...prev] : createDefaultPointsRoles();
       const idx = base.findIndex((r) => r.roleId === roleId);
@@ -134,6 +138,7 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
   };
 
   const updateProfileField = (employeeId: string, patch: Partial<EmployeePointsProfile>) => {
+    if (isReadOnly) return;
     setDraftProfiles((prev) => {
       const base = [...prev];
       const idx = base.findIndex((p) => p.employeeId === employeeId);
@@ -151,6 +156,7 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
   };
 
   const handleSaveRolesSubmit = async () => {
+    if (isReadOnly) return;
     setIsSaving(true);
     setFeedback(null);
     try {
@@ -165,6 +171,7 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
   };
 
   const handleSaveProfilesSubmit = async () => {
+    if (isReadOnly) return;
     setIsSaving(true);
     setFeedback(null);
     try {
@@ -182,6 +189,7 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
 
   const handleAddRuleAndSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnly) return;
     if (!newRuleBonusId) {
       setFeedback({ type: 'error', text: 'Оберіть бонус.' });
       return;
@@ -232,6 +240,7 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
   };
 
   const handleToggleRule = async (ruleId: string) => {
+    if (isReadOnly) return;
     const next = draftRules.map((r) =>
       r.id === ruleId ? { ...r, active: !r.active, updatedAtUtc: new Date().toISOString() } : r
     );
@@ -249,6 +258,7 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
   };
 
   const handleRemoveRule = async (ruleId: string) => {
+    if (isReadOnly) return;
     const next = draftRules.filter((r) => r.id !== ruleId);
     setDraftRules(next);
     setIsSaving(true);
@@ -275,6 +285,15 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
         </p>
       </div>
 
+      {isReadOnly && (
+        <div className="bg-bg-1 border border-accent/30 rounded-2xl p-4 flex items-start gap-3 text-xs text-gray-2">
+          <Lock className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+          <div>
+            <strong className="text-fg">Режим лише перегляду:</strong> налаштування ролей, профілів балів та правил доступності бонусів відкрито лише для ознайомлення.
+          </div>
+        </div>
+      )}
+
       {feedback && (
         <div
           className={`rounded-2xl p-3.5 text-xs flex items-start gap-2.5 border ${
@@ -299,15 +318,17 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
             <ShieldCheck className="w-4 h-4 text-accent" />
             <span>Ролі балів («Ролі балів»)</span>
           </h3>
-          <button
-            type="button"
-            disabled={isSaving}
-            onClick={handleSaveRolesSubmit}
-            className="px-4 py-2 rounded-xl bg-accent hover:bg-accent/90 text-bg-1 text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-50"
-          >
-            <Save className="w-3.5 h-3.5" />
-            <span>Зберегти ролі та категорії</span>
-          </button>
+          {!isReadOnly && (
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={handleSaveRolesSubmit}
+              className="px-4 py-2 rounded-xl bg-accent hover:bg-accent/90 text-bg-1 text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>Зберегти ролі та категорії</span>
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -323,9 +344,10 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
                   <label className="flex items-center gap-2 text-xs text-fg cursor-pointer">
                     <input
                       type="checkbox"
+                      disabled={isReadOnly}
                       checked={cfg.active}
                       onChange={(e) => updateRoleField(roleId, 'active', e.target.checked)}
-                      className="accent-accent"
+                      className="accent-accent disabled:opacity-60"
                     />
                     <span>Роль активна</span>
                   </label>
@@ -337,9 +359,10 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
                     <input
                       type="number"
                       min={0}
+                      disabled={isReadOnly}
                       value={cfg.monthlyBasePoints}
                       onChange={(e) => updateRoleField(roleId, 'monthlyBasePoints', Math.max(0, Number(e.target.value) || 0))}
-                      className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg font-mono focus:outline-none focus:border-accent"
+                      className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg font-mono focus:outline-none focus:border-accent disabled:opacity-60"
                     />
                   </div>
 
@@ -348,20 +371,22 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
                     <input
                       type="number"
                       min={1}
+                      disabled={isReadOnly}
                       value={cfg.minutesPerPoint}
                       onChange={(e) => updateRoleField(roleId, 'minutesPerPoint', Math.max(1, Number(e.target.value) || 30))}
-                      className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg font-mono focus:outline-none focus:border-accent"
+                      className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg font-mono focus:outline-none focus:border-accent disabled:opacity-60"
                     />
                   </div>
 
                   <div className="space-y-1">
                     <label className="text-xs text-gray-2 block">Режим врахування часу</label>
                     <select
+                      disabled={isReadOnly}
                       value={cfg.eligibleTimeMode}
                       onChange={(e) =>
                         updateRoleField(roleId, 'eligibleTimeMode', e.target.value as PointsEligibleTimeMode)
                       }
-                      className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                      className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-60"
                     >
                       <option value="all">Увесь робочий час ролі</option>
                       <option value="selected_categories">Лише обрані категорії</option>
@@ -373,11 +398,12 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
                     <input
                       type="number"
                       min={0}
+                      disabled={isReadOnly}
                       value={cfg.positiveGraceMonths}
                       onChange={(e) =>
                         updateRoleField(roleId, 'positiveGraceMonths', Math.max(0, Number(e.target.value) || 0))
                       }
-                      className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg font-mono focus:outline-none focus:border-accent"
+                      className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg font-mono focus:outline-none focus:border-accent disabled:opacity-60"
                     />
                   </div>
                 </div>
@@ -386,9 +412,10 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
                   <label className="flex items-center gap-2 text-xs text-fg cursor-pointer">
                     <input
                       type="checkbox"
+                      disabled={isReadOnly}
                       checked={cfg.timeEarningEnabled}
                       onChange={(e) => updateRoleField(roleId, 'timeEarningEnabled', e.target.checked)}
-                      className="accent-accent"
+                      className="accent-accent disabled:opacity-60"
                     />
                     <span>Нараховувати бали за час</span>
                   </label>
@@ -396,9 +423,10 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
                   <label className="flex items-center gap-2 text-xs text-fg cursor-pointer">
                     <input
                       type="checkbox"
+                      disabled={isReadOnly}
                       checked={cfg.negativeCarryover}
                       onChange={(e) => updateRoleField(roleId, 'negativeCarryover', e.target.checked)}
-                      className="accent-accent"
+                      className="accent-accent disabled:opacity-60"
                     />
                     <span>Переносити від’ємний баланс (борг)</span>
                   </label>
@@ -421,12 +449,16 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
                   <button
                     key={cat.id}
                     type="button"
-                    onClick={() =>
+                    disabled={isReadOnly}
+                    onClick={() => {
+                      if (isReadOnly) return;
                       setDraftCategoryIds((prev) =>
                         prev.includes(cat.id) ? prev.filter((id) => id !== cat.id) : [...prev, cat.id]
-                      )
-                    }
-                    className={`px-3 py-1.5 rounded-xl text-xs font-medium border flex items-center gap-2 cursor-pointer transition-colors ${
+                      );
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-medium border flex items-center gap-2 transition-colors ${
+                      isReadOnly ? 'cursor-default opacity-80' : 'cursor-pointer'
+                    } ${
                       selected
                         ? 'bg-accent/15 border-accent text-accent'
                         : 'bg-bg-2 border-border-default text-gray-2'
@@ -454,15 +486,17 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
               Порожнє поле наслідує налаштування ролі; явний «0» перевизначає базове значення на 0. Посада в команді не змінюється.
             </p>
           </div>
-          <button
-            type="button"
-            disabled={isSaving}
-            onClick={handleSaveProfilesSubmit}
-            className="px-4 py-2 rounded-xl bg-accent hover:bg-accent/90 text-bg-1 text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-50"
-          >
-            <Save className="w-3.5 h-3.5" />
-            <span>Зберегти профілі</span>
-          </button>
+          {!isReadOnly && (
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={handleSaveProfilesSubmit}
+              className="px-4 py-2 rounded-xl bg-accent hover:bg-accent/90 text-bg-1 text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>Зберегти профілі</span>
+            </button>
+          )}
         </div>
 
         <div className="bg-bg-1 border border-border-default rounded-3xl overflow-hidden">
@@ -491,11 +525,12 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
                       </td>
                       <td className="p-3.5">
                         <select
+                          disabled={isReadOnly}
                           value={prof.pointsRole}
                           onChange={(e) =>
                             updateProfileField(emp.id, { pointsRole: e.target.value as PointsRoleId })
                           }
-                          className="bg-bg-2 border border-border-default rounded-xl px-2.5 py-1.5 text-xs text-fg"
+                          className="bg-bg-2 border border-border-default rounded-xl px-2.5 py-1.5 text-xs text-fg disabled:opacity-60"
                         >
                           <option value="manager">Керівник</option>
                           <option value="performer">Виконавець</option>
@@ -505,6 +540,7 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
                         <input
                           type="number"
                           min={0}
+                          disabled={isReadOnly}
                           placeholder="За роллю"
                           value={prof.monthlyBaseOverride ?? ''}
                           onChange={(e) => {
@@ -513,11 +549,12 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
                               monthlyBaseOverride: v === '' ? null : Math.max(0, Number(v)),
                             });
                           }}
-                          className="w-24 bg-bg-2 border border-border-default rounded-xl px-2.5 py-1.5 text-xs text-fg font-mono"
+                          className="w-24 bg-bg-2 border border-border-default rounded-xl px-2.5 py-1.5 text-xs text-fg font-mono disabled:opacity-60"
                         />
                       </td>
                       <td className="p-3.5">
                         <select
+                          disabled={isReadOnly}
                           value={
                             prof.timeEarningOverride === null
                               ? 'inherit'
@@ -531,7 +568,7 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
                               timeEarningOverride: val === 'inherit' ? null : val === 'true',
                             });
                           }}
-                          className="bg-bg-2 border border-border-default rounded-xl px-2.5 py-1.5 text-xs text-fg"
+                          className="bg-bg-2 border border-border-default rounded-xl px-2.5 py-1.5 text-xs text-fg disabled:opacity-60"
                         >
                           <option value="inherit">За роллю</option>
                           <option value="true">Так</option>
@@ -542,6 +579,7 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
                         <input
                           type="number"
                           min={1}
+                          disabled={isReadOnly}
                           placeholder="За роллю"
                           value={prof.minutesPerPointOverride ?? ''}
                           onChange={(e) => {
@@ -550,15 +588,16 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
                               minutesPerPointOverride: v === '' ? null : Math.max(1, Number(v) || 1),
                             });
                           }}
-                          className="w-24 bg-bg-2 border border-border-default rounded-xl px-2.5 py-1.5 text-xs text-fg font-mono"
+                          className="w-24 bg-bg-2 border border-border-default rounded-xl px-2.5 py-1.5 text-xs text-fg font-mono disabled:opacity-60"
                         />
                       </td>
                       <td className="p-3.5">
                         <input
                           type="checkbox"
+                          disabled={isReadOnly}
                           checked={prof.pointsEnabled}
                           onChange={(e) => updateProfileField(emp.id, { pointsEnabled: e.target.checked })}
-                          className="accent-accent"
+                          className="accent-accent disabled:opacity-60"
                         />
                       </td>
                       <td className="p-3.5 text-[11px] text-gray-2 tabular-nums">
@@ -595,6 +634,7 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
           </p>
         </div>
 
+        {!isReadOnly && (
         <form
           onSubmit={handleAddRuleAndSave}
           className="bg-bg-1 border border-border-default rounded-3xl p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end"
@@ -710,6 +750,7 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
             </button>
           </div>
         </form>
+        )}
 
         <div className="bg-bg-1 border border-border-default rounded-3xl overflow-hidden">
           {draftRules.length === 0 ? (
@@ -754,23 +795,25 @@ export const PointsSettingsView: React.FC<PointsSettingsViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleRule(rule.id)}
-                        className="px-3 py-1.5 rounded-xl bg-bg-2 hover:bg-border-default border border-border-default text-xs text-fg cursor-pointer"
-                      >
-                        {rule.active ? 'Вимкнути' : 'Увімкнути'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRule(rule.id)}
-                        className="p-2 rounded-xl bg-danger/10 hover:bg-danger/20 text-danger cursor-pointer"
-                        title="Видалити правило"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    {!isReadOnly && (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleRule(rule.id)}
+                          className="px-3 py-1.5 rounded-xl bg-bg-2 hover:bg-border-default border border-border-default text-xs text-fg cursor-pointer"
+                        >
+                          {rule.active ? 'Вимкнути' : 'Увімкнути'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveRule(rule.id)}
+                          className="p-2 rounded-xl bg-danger/10 hover:bg-danger/20 text-danger cursor-pointer"
+                          title="Видалити правило"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}

@@ -14,6 +14,7 @@ import { POINTS_OPERATION_LABELS, POINTS_ROLE_LABELS } from '../utils/pointsEngi
 
 interface PointsReasonsViewProps {
   reasons: PointsReason[];
+  isReadOnly?: boolean;
   onSaveReasons: (nextReasons: PointsReason[]) => Promise<{ success: boolean; error?: string; message?: string }>;
 }
 
@@ -23,7 +24,11 @@ const GROUPS: { type: PointsReasonOperationType; title: string; badgeClass: stri
   { type: 'neutral_self_report', title: 'Без зміни балів (Самозвіти 0 б.)', badgeClass: 'bg-accent/15 text-accent border-accent/30' },
 ];
 
-export const PointsReasonsView: React.FC<PointsReasonsViewProps> = ({ reasons, onSaveReasons }) => {
+export const PointsReasonsView: React.FC<PointsReasonsViewProps> = ({
+  reasons,
+  isReadOnly = false,
+  onSaveReasons,
+}) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [operationType, setOperationType] = useState<PointsReasonOperationType>('manual_award');
@@ -52,6 +57,7 @@ export const PointsReasonsView: React.FC<PointsReasonsViewProps> = ({ reasons, o
   };
 
   const handleEdit = (reason: PointsReason) => {
+    if (isReadOnly) return;
     setEditingId(reason.id);
     setName(reason.name);
     setOperationType(reason.operationType);
@@ -75,6 +81,7 @@ export const PointsReasonsView: React.FC<PointsReasonsViewProps> = ({ reasons, o
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnly) return;
     setFeedback(null);
     const cleanName = name.trim();
     if (!cleanName) {
@@ -114,6 +121,7 @@ export const PointsReasonsView: React.FC<PointsReasonsViewProps> = ({ reasons, o
   };
 
   const handleToggleActive = async (reason: PointsReason) => {
+    if (isReadOnly) return;
     setIsSaving(true);
     setFeedback(null);
     try {
@@ -169,8 +177,18 @@ export const PointsReasonsView: React.FC<PointsReasonsViewProps> = ({ reasons, o
         </div>
       )}
 
+      {isReadOnly && (
+        <div className="bg-bg-1 border border-accent/30 rounded-2xl p-4 flex items-start gap-3 text-xs text-gray-2">
+          <Info className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+          <div>
+            <strong className="text-fg">Режим лише перегляду:</strong> додавання, редагування та вимкнення причин балів недоступні.
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         {/* Form */}
+        {!isReadOnly && (
         <form
           onSubmit={handleSubmit}
           className="xl:col-span-4 bg-bg-1 border border-border-default rounded-3xl p-5 space-y-4"
@@ -293,9 +311,10 @@ export const PointsReasonsView: React.FC<PointsReasonsViewProps> = ({ reasons, o
             <span>{editingId ? 'Зберегти причину' : 'Додати причину'}</span>
           </button>
         </form>
+        )}
 
         {/* Grouped List */}
-        <div className="xl:col-span-8 space-y-5">
+        <div className={`${isReadOnly ? 'xl:col-span-12' : 'xl:col-span-8'} space-y-5`}>
           {GROUPS.map((grp) => {
             const list = sortedReasons.filter((r) => r.operationType === grp.type);
             return (
@@ -344,25 +363,27 @@ export const PointsReasonsView: React.FC<PointsReasonsViewProps> = ({ reasons, o
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                          <button
-                            type="button"
-                            onClick={() => handleEdit(reason)}
-                            className="p-2 rounded-xl bg-bg-2 hover:bg-border-default border border-border-default text-gray-2 hover:text-fg transition-colors cursor-pointer"
-                            title="Редагувати"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={isSaving}
-                            onClick={() => handleToggleActive(reason)}
-                            className="p-2 rounded-xl bg-bg-2 hover:bg-border-default border border-border-default text-gray-2 hover:text-fg transition-colors cursor-pointer"
-                            title={reason.active ? 'Вимкнути' : 'Увімкнути'}
-                          >
-                            <Power className={`w-3.5 h-3.5 ${reason.active ? 'text-emerald-400' : 'text-gray-1'}`} />
-                          </button>
-                        </div>
+                        {!isReadOnly && (
+                          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                            <button
+                              type="button"
+                              onClick={() => handleEdit(reason)}
+                              className="p-2 rounded-xl bg-bg-2 hover:bg-border-default border border-border-default text-gray-2 hover:text-fg transition-colors cursor-pointer"
+                              title="Редагувати"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() => handleToggleActive(reason)}
+                              className="p-2 rounded-xl bg-bg-2 hover:bg-border-default border border-border-default text-gray-2 hover:text-fg transition-colors cursor-pointer"
+                              title={reason.active ? 'Вимкнути' : 'Увімкнути'}
+                            >
+                              <Power className={`w-3.5 h-3.5 ${reason.active ? 'text-emerald-400' : 'text-gray-1'}`} />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

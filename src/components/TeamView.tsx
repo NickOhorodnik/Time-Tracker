@@ -53,6 +53,7 @@ interface TeamViewProps {
   categories: Category[];
   projects: Project[];
   syncState: SyncState;
+  isReadOnly?: boolean;
   onSaveEmployee: (employee: Employee, isNew: boolean) => Promise<{ success: boolean; error?: string }>;
   onArchiveEmployee: (employeeId: string, nextStatus: EmployeeStatus) => Promise<{ success: boolean; error?: string }>;
   onSaveRating: (rating: EmployeeRating) => Promise<{ success: boolean; error?: string }>;
@@ -85,12 +86,14 @@ export const TeamView: React.FC<TeamViewProps> = ({
   categories,
   projects,
   syncState,
+  isReadOnly = false,
   onSaveEmployee,
   onArchiveEmployee,
   onSaveRating,
   onOpenEmployeeInHistory,
   onOpenEmployeeInCalendar,
 }) => {
+  const effectiveReadOnly = isReadOnly || Boolean(syncState?.isReadOnly);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'active' | 'archived' | 'all'>('active');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
@@ -167,6 +170,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
   }, [selectedEmployee, ratings]);
 
   const openCreateModal = () => {
+    if (effectiveReadOnly) return;
     setEditingEmployee(null);
     setEmpName('');
     setEmpRole('');
@@ -178,6 +182,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
   };
 
   const openEditModal = (emp: Employee) => {
+    if (effectiveReadOnly) return;
     setEditingEmployee(emp);
     setEmpName(emp.name);
     setEmpRole(emp.role || '');
@@ -219,6 +224,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
 
   const handleSubmitEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (effectiveReadOnly) return;
     const validation = validateEmployeeInput(
       { name: empName },
       employees,
@@ -278,6 +284,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
   };
 
   const handleToggleArchive = async (emp: Employee) => {
+    if (effectiveReadOnly) return;
     const nextStatus: EmployeeStatus = emp.status === 'archived' ? 'active' : 'archived';
     const res = await onArchiveEmployee(emp.id, nextStatus);
     if (res.success) {
@@ -298,7 +305,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
 
   const handleSubmitRating = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEmployee || isSavingRating) return;
+    if (effectiveReadOnly || !selectedEmployee || isSavingRating) return;
 
     const validation = validateRatingInput({
       employeeId: selectedEmployee.id,
@@ -390,18 +397,28 @@ export const TeamView: React.FC<TeamViewProps> = ({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={openCreateModal}
-          className="w-full md:w-auto bg-accent hover:bg-accent/90 text-bg-1 px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-lg shadow-accent/20 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
-        >
-          <UserPlus className="w-4 h-4 shrink-0" />
-          <span>Додати співробітника</span>
-        </button>
+        {!effectiveReadOnly && (
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="w-full md:w-auto bg-accent hover:bg-accent/90 text-bg-1 px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-lg shadow-accent/20 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+          >
+            <UserPlus className="w-4 h-4 shrink-0" />
+            <span>Додати співробітника</span>
+          </button>
+        )}
       </div>
 
       {/* Mode Notice */}
-      {!isGasHosted ? (
+      {effectiveReadOnly ? (
+        <div className="bg-bg-1 border border-accent/30 rounded-2xl p-4 flex items-start gap-3">
+          <Info className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+          <div className="text-xs text-gray-2 leading-relaxed">
+            <span className="font-semibold text-fg">Режим лише перегляду: </span>
+            ви можете переглядати профілі команди, історію оцінок і статистику часу. Додавання співробітників, редагування профілів та виставлення оцінок вимкнено.
+          </div>
+        </div>
+      ) : !isGasHosted ? (
         <div className="bg-bg-1 border border-border-default rounded-2xl p-4 flex items-start gap-3">
           <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div className="text-xs text-gray-2 leading-relaxed">
@@ -533,32 +550,36 @@ export const TeamView: React.FC<TeamViewProps> = ({
                   </div>
                 )}
 
-              <button
-                type="button"
-                onClick={() => openEditModal(selectedEmployee)}
-                className="bg-bg-2 hover:bg-border-default border border-border-default text-fg px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 cursor-pointer"
-              >
-                <Edit3 className="w-3.5 h-3.5 text-accent" />
-                <span>Редагувати</span>
-              </button>
+              {!effectiveReadOnly && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(selectedEmployee)}
+                    className="bg-bg-2 hover:bg-border-default border border-border-default text-fg px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-accent" />
+                    <span>Редагувати</span>
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => handleToggleArchive(selectedEmployee)}
-                className="bg-bg-2 hover:bg-border-default border border-border-default text-fg px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 cursor-pointer"
-              >
-                {selectedEmployee.status === 'archived' ? (
-                  <>
-                    <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Відновити</span>
-                  </>
-                ) : (
-                  <>
-                    <Archive className="w-3.5 h-3.5 text-amber-400" />
-                    <span>В архів</span>
-                  </>
-                )}
-              </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleArchive(selectedEmployee)}
+                    className="bg-bg-2 hover:bg-border-default border border-border-default text-fg px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 cursor-pointer"
+                  >
+                    {selectedEmployee.status === 'archived' ? (
+                      <>
+                        <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Відновити</span>
+                      </>
+                    ) : (
+                      <>
+                        <Archive className="w-3.5 h-3.5 text-amber-400" />
+                        <span>В архів</span>
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -566,6 +587,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
             {/* Left: Rating Form & History */}
             <div className="xl:col-span-5 space-y-6 min-w-0">
               {/* New Rating Form */}
+              {!effectiveReadOnly && (
               <form
                 onSubmit={handleSubmitRating}
                 className="bg-bg-1 border border-border-default rounded-3xl p-4 sm:p-6 space-y-4"
@@ -674,6 +696,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
                   {isSavingRating ? 'Збереження...' : 'Зберегти оцінку'}
                 </button>
               </form>
+              )}
 
               {/* Rating History */}
               <div className="bg-bg-1 border border-border-default rounded-3xl p-4 sm:p-6 space-y-4">
@@ -966,34 +989,36 @@ export const TeamView: React.FC<TeamViewProps> = ({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(emp)}
-                            title="Редагувати профіль"
-                            aria-label={`Редагувати ${emp.name}`}
-                            className="p-2 rounded-xl bg-bg-2 hover:bg-border-default border border-border-default text-gray-2 hover:text-fg cursor-pointer"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleArchive(emp)}
-                            title={emp.status === 'archived' ? 'Відновити з архіву' : 'Перевести в архів'}
-                            aria-label={
-                              emp.status === 'archived'
-                                ? `Відновити ${emp.name}`
-                                : `Архівувати ${emp.name}`
-                            }
-                            className="p-2 rounded-xl bg-bg-2 hover:bg-border-default border border-border-default text-gray-2 hover:text-fg cursor-pointer"
-                          >
-                            {emp.status === 'archived' ? (
-                              <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
-                            ) : (
-                              <Archive className="w-3.5 h-3.5 text-amber-400" />
-                            )}
-                          </button>
-                        </div>
+                        {!effectiveReadOnly && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(emp)}
+                              title="Редагувати профіль"
+                              aria-label={`Редагувати ${emp.name}`}
+                              className="p-2 rounded-xl bg-bg-2 hover:bg-border-default border border-border-default text-gray-2 hover:text-fg cursor-pointer"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleArchive(emp)}
+                              title={emp.status === 'archived' ? 'Відновити з архіву' : 'Перевести в архів'}
+                              aria-label={
+                                emp.status === 'archived'
+                                  ? `Відновити ${emp.name}`
+                                  : `Архівувати ${emp.name}`
+                              }
+                              className="p-2 rounded-xl bg-bg-2 hover:bg-border-default border border-border-default text-gray-2 hover:text-fg cursor-pointer"
+                            >
+                              {emp.status === 'archived' ? (
+                                <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                              ) : (
+                                <Archive className="w-3.5 h-3.5 text-amber-400" />
+                              )}
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {/* Latest Rating Block */}

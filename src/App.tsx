@@ -12,7 +12,14 @@ import { PointsTeamView } from './components/PointsTeamView';
 import { PointsReasonsView } from './components/PointsReasonsView';
 import { PointsSettingsView } from './components/PointsSettingsView';
 import { SettingsView } from './components/SettingsView';
-import { api, isGasHostedRuntime } from './services/api';
+import { Eye, RefreshCw } from 'lucide-react';
+import {
+  api,
+  getReadOnlyShareSession,
+  isGasHostedRuntime,
+  isReadOnlyShareMode,
+} from './services/api';
+import { READ_ONLY_ERROR_MESSAGE } from './services/gasBridge';
 import { initialEmployees, initialRatings, initialSettings } from './mockData';
 import { resolveAssetUrl } from './utils/assetResolver';
 import { getDefaultEmployeeId, migrateTimeEntriesEmployeeId } from './utils/teamUtils';
@@ -74,8 +81,15 @@ export default function App() {
   const [bonuses, setBonuses] = useState<Bonus[]>([]);
   const [phrases, setPhrases] = useState<Phrase[]>([]);
   const [motivationalPhrases, setMotivationalPhrases] = useState<MotivationalPhrase[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>(initialEmployees);
-  const [ratings, setRatings] = useState<EmployeeRating[]>(initialRatings);
+  const shareSession = useMemo(() => getReadOnlyShareSession(), []);
+  const isReadOnly = Boolean(shareSession?.isReadOnly);
+
+  const [employees, setEmployees] = useState<Employee[]>(() =>
+    isReadOnlyShareMode() ? [] : initialEmployees
+  );
+  const [ratings, setRatings] = useState<EmployeeRating[]>(() =>
+    isReadOnlyShareMode() ? [] : initialRatings
+  );
   const [pointsRoles, setPointsRoles] = useState<PointsRoleConfig[]>(() => createDefaultPointsRoles());
   const [pointsProfiles, setPointsProfiles] = useState<EmployeePointsProfile[]>([]);
   const [pointsReasons, setPointsReasons] = useState<PointsReason[]>([]);
@@ -93,18 +107,20 @@ export default function App() {
   const gasHosted = isGasHostedRuntime();
 
   // Single source of truth for all connection status surfaces (Sidebar, Header, Settings)
-  const [syncState, setSyncState] = useState<SyncState>({
-    status: gasHosted ? 'unverified' : 'local_preview',
+  const [syncState, setSyncState] = useState<SyncState>(() => ({
+    status: shareSession?.error ? 'error' : gasHosted ? 'unverified' : 'local_preview',
     runtimeMode: gasHosted ? 'gas_hosted' : 'local_preview',
     lastSyncedAt: null,
-    errorMessage: null,
-    errorCode: null,
+    errorMessage: shareSession?.error || null,
+    errorCode: shareSession?.error ? 'SHARE_LINK_INVALID' : null,
     hasConfiguredUrl: gasHosted,
     hasConfiguredSpreadsheet: gasHosted,
     spreadsheetName: null,
-    spreadsheetId: null,
+    spreadsheetId: shareSession?.spreadsheetId || null,
     imageDiagnostics: null,
-  });
+    isReadOnly,
+    readOnlySource: shareSession?.sourceMode,
+  }));
 
   const loadGenerationRef = useRef<number>(0);
   const editVersionsRef = useRef({
@@ -200,6 +216,8 @@ export default function App() {
             hasConfiguredUrl: true,
             hasConfiguredSpreadsheet: true,
             spreadsheetId: res.spreadsheetId || prev.spreadsheetId || null,
+            isReadOnly,
+            readOnlySource: shareSession?.sourceMode,
           }));
           return {
             success: false,
@@ -218,10 +236,14 @@ export default function App() {
             hasConfiguredSpreadsheet: true,
             spreadsheetName: res.spreadsheetName || null,
             spreadsheetId: res.spreadsheetId || null,
+            isReadOnly,
+            readOnlySource: shareSession?.sourceMode,
           }));
           return {
             success: true,
-            message: `Таблиця «${res.spreadsheetName || 'Власна Google Таблиця'}» ще порожня. Натисніть «Синхронізувати», щоб записати поточні дані, або «Підготувати аркуші».`,
+            message: isReadOnly
+              ? `Таблиця «${res.spreadsheetName || 'Google Таблиця'}» порожня і відкрита в режимі лише перегляду.`
+              : `Таблиця «${res.spreadsheetName || 'Власна Google Таблиця'}» ще порожня. Натисніть «Синхронізувати», щоб записати поточні дані, або «Підготувати аркуші».`,
           };
         }
 
@@ -469,7 +491,10 @@ export default function App() {
               ...cur.settings,
               ...(res.settings || {}),
               stages: mergedStages,
-              gasWebAppUrl: cur.settings.gasWebAppUrl,
+              gasWebAppUrl: isReadOnly ? undefined : cur.settings.gasWebAppUrl,
+              googleSpreadsheetInput: isReadOnly
+                ? shareSession?.spreadsheetInput || res.spreadsheetId || undefined
+                : cur.settings.googleSpreadsheetInput,
               googleSpreadsheetId: res.spreadsheetId || cur.settings.googleSpreadsheetId,
             };
             latestStateRef.current.settings = mergedSettings;
@@ -503,6 +528,8 @@ export default function App() {
           spreadsheetName: res.spreadsheetName || null,
           spreadsheetId: res.spreadsheetId || null,
           imageDiagnostics: computedDiagnostics,
+          isReadOnly,
+          readOnlySource: shareSession?.sourceMode,
         });
 
         return {
@@ -515,7 +542,7 @@ export default function App() {
         }
       }
     },
-    []
+    [isReadOnly, shareSession?.sourceMode, shareSession?.spreadsheetInput]
   );
 
   // Load local data & drafts first, then bootstrap from Google Sheets when GAS-hosted
@@ -580,6 +607,25 @@ export default function App() {
           spreadsheetName: null,
           spreadsheetId: null,
           imageDiagnostics: buildImageDiagnostics(localData.imageRegistry, localData.imageAssignments),
+          isReadOnly: false,
+        });
+        return;
+      }
+
+      if (shareSession?.error) {
+        setSyncState({
+          status: 'error',
+          runtimeMode: 'gas_hosted',
+          lastSyncedAt: null,
+          errorMessage: shareSession.error,
+          errorCode: 'SHARE_LINK_INVALID',
+          hasConfiguredUrl: true,
+          hasConfiguredSpreadsheet: false,
+          spreadsheetName: null,
+          spreadsheetId: shareSession.spreadsheetId || null,
+          imageDiagnostics: null,
+          isReadOnly: true,
+          readOnlySource: shareSession.sourceMode,
         });
         return;
       }
@@ -593,8 +639,10 @@ export default function App() {
         hasConfiguredUrl: true,
         hasConfiguredSpreadsheet: true,
         spreadsheetName: null,
-        spreadsheetId: null,
+        spreadsheetId: shareSession?.spreadsheetId || null,
         imageDiagnostics: buildImageDiagnostics(localData.imageRegistry, localData.imageAssignments),
+        isReadOnly,
+        readOnlySource: shareSession?.sourceMode,
       });
 
       await loadAndApplyRemoteSheet({
@@ -606,7 +654,7 @@ export default function App() {
     return () => {
       isMounted = false;
     };
-  }, [loadAndApplyRemoteSheet]);
+  }, [isReadOnly, loadAndApplyRemoteSheet, shareSession?.error, shareSession?.sourceMode, shareSession?.spreadsheetId]);
 
   // Timer tick effect (saved locally only; never writes every second to Sheets)
   useEffect(() => {
@@ -671,6 +719,8 @@ export default function App() {
         hasConfiguredSpreadsheet: true,
         spreadsheetName: result.spreadsheetName || null,
         spreadsheetId: result.spreadsheetId || prev.spreadsheetId || null,
+        isReadOnly,
+        readOnlySource: shareSession?.sourceMode,
       }));
     } else {
       setSyncState((prev) => ({
@@ -679,9 +729,11 @@ export default function App() {
         runtimeMode: 'gas_hosted',
         errorMessage: result.message,
         errorCode: 'GAS_EXECUTION_ERROR',
-        hasConfiguredUrl: false,
+        hasConfiguredUrl: true,
         hasConfiguredSpreadsheet: false,
         spreadsheetName: null,
+        isReadOnly,
+        readOnlySource: shareSession?.sourceMode,
       }));
     }
 
@@ -690,6 +742,9 @@ export default function App() {
 
   // Explicit setup of missing tabs/headers inside GAS HtmlService
   const handleSetupSpreadsheet = async () => {
+    if (isReadOnly) {
+      return { success: false, message: READ_ONLY_ERROR_MESSAGE };
+    }
     const res = await api.setupSpreadsheet();
     if (isGasHostedRuntime() && res.success) {
       setSyncState((prev) => ({
@@ -727,6 +782,7 @@ export default function App() {
     employeeId?: string,
     relatedEmployeeId?: string
   ) => {
+    if (isReadOnly) return;
     const resolvedEmployeeId = employeeId || getDefaultEmployeeId(employees);
     const newState: ActiveTimerState = {
       isRunning: true,
@@ -746,35 +802,35 @@ export default function App() {
   };
 
   const handlePauseTimer = () => {
-    if (!timerState) return;
+    if (isReadOnly || !timerState) return;
     const newState = { ...timerState, isPaused: true };
     setTimerState(newState);
     api.saveTimerState(newState);
   };
 
   const handleResumeTimer = () => {
-    if (!timerState) return;
+    if (isReadOnly || !timerState) return;
     const newState = { ...timerState, isPaused: false };
     setTimerState(newState);
     api.saveTimerState(newState);
   };
 
   const handleUpdateElapsedSeconds = (seconds: number) => {
-    if (!timerState) return;
+    if (isReadOnly || !timerState) return;
     const newState = { ...timerState, elapsedSeconds: seconds };
     setTimerState(newState);
     api.saveTimerState(newState);
   };
 
   const handleUpdateTimerField = (updates: Partial<ActiveTimerState>) => {
-    if (!timerState) return;
+    if (isReadOnly || !timerState) return;
     const newState = { ...timerState, ...updates };
     setTimerState(newState);
     api.saveTimerState(newState);
   };
 
   const handleStopTimer = async () => {
-    if (!timerState) return;
+    if (isReadOnly || !timerState) return;
     const rawElapsed = Math.max(0, Math.round(timerState.elapsedSeconds || 0));
     const totalMinutes = Math.max(1, Math.round(rawElapsed / 60));
     const now = new Date();
@@ -828,6 +884,7 @@ export default function App() {
 
   // Manual Entry actions (local-first; pushes via google.script.run when GAS-hosted)
   const handleAddManualEntry = async (entry: Omit<TimeEntry, 'id'>) => {
+    if (isReadOnly) return;
     const newEntry: TimeEntry = {
       ...entry,
       employeeId: entry.employeeId || getDefaultEmployeeId(employees),
@@ -858,6 +915,7 @@ export default function App() {
   };
 
   const handleDeleteEntry = async (id: string) => {
+    if (isReadOnly) return;
     if (confirm('Ви дійсно бажаєте видалити цей запис часу?')) {
       editVersionsRef.current.entries += 1;
       const updated = entries.filter((e) => e.id !== id);
@@ -885,6 +943,7 @@ export default function App() {
   };
 
   const handleUpdateEntry = async (updatedEntry: TimeEntry) => {
+    if (isReadOnly) return;
     editVersionsRef.current.entries += 1;
     const prevEntry = latestStateRef.current.entries.find((e) => e.id === updatedEntry.id) || null;
     const preparedEntry = prepareUpdatedTimeEntry(
@@ -931,6 +990,9 @@ export default function App() {
     segmentId?: string;
     relatedEmployeeId?: string;
   }): Promise<{ success: boolean; error?: string; message?: string }> => {
+    if (isReadOnly) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     const commandId = `cmd-ptx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
     if (isGasHostedRuntime()) {
@@ -991,6 +1053,9 @@ export default function App() {
     transactionId: string;
     comment: string;
   }): Promise<{ success: boolean; error?: string; message?: string }> => {
+    if (isReadOnly) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     const commandId = `cmd-rev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
     if (isGasHostedRuntime()) {
@@ -1035,6 +1100,9 @@ export default function App() {
   const handleEnsureMonthlyAllocations = async (
     monthKey: string
   ): Promise<{ success: boolean; error?: string; message?: string }> => {
+    if (isReadOnly) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     const targetMk = monthKey || getKyivDateParts(new Date()).monthKey;
     const commandId = `cmd-alloc-${targetMk}-${Date.now()}`;
 
@@ -1092,6 +1160,9 @@ export default function App() {
     error?: string;
     message?: string;
   }> => {
+    if (isReadOnly) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     const commandId = `cmd-time-sync-${Date.now()}`;
 
     if (isGasHostedRuntime()) {
@@ -1147,6 +1218,9 @@ export default function App() {
     employeeId: string,
     monthKey: string
   ): Promise<{ success: boolean; error?: string; message?: string }> => {
+    if (isReadOnly) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     const eff = resolveEffectiveEmployeePointsConfig(
       employeeId,
       latestStateRef.current.pointsRoles,
@@ -1194,6 +1268,9 @@ export default function App() {
   const handleSavePointsReasons = async (
     nextReasons: PointsReason[]
   ): Promise<{ success: boolean; error?: string; message?: string }> => {
+    if (isReadOnly) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     const commandId = `cmd-reasons-${Date.now()}`;
     if (isGasHostedRuntime()) {
       const res = await api.executePointsCommandRemote({
@@ -1219,6 +1296,9 @@ export default function App() {
     nextRoles: PointsRoleConfig[],
     nextEligibleCategoryIds: string[]
   ): Promise<{ success: boolean; error?: string; message?: string }> => {
+    if (isReadOnly) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     const commandId = `cmd-roles-${Date.now()}`;
     if (isGasHostedRuntime()) {
       const res = await api.executePointsCommandRemote({
@@ -1254,6 +1334,9 @@ export default function App() {
   const handleSavePointsProfiles = async (
     nextProfiles: EmployeePointsProfile[]
   ): Promise<{ success: boolean; error?: string; message?: string }> => {
+    if (isReadOnly) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     const commandId = `cmd-profiles-${Date.now()}`;
     if (isGasHostedRuntime()) {
       const res = await api.executePointsCommandRemote({
@@ -1278,6 +1361,9 @@ export default function App() {
   const handleSaveBonusEligibility = async (
     nextRules: BonusEligibilityRule[]
   ): Promise<{ success: boolean; error?: string; message?: string }> => {
+    if (isReadOnly) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     const commandId = `cmd-elig-${Date.now()}`;
     if (isGasHostedRuntime()) {
       const res = await api.executePointsCommandRemote({
@@ -1305,6 +1391,9 @@ export default function App() {
     quantity: number;
     comment?: string;
   }): Promise<{ success: boolean; error?: string; message?: string }> => {
+    if (isReadOnly) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     const commandId = `cmd-claim-${params.employeeId}-${params.bonusId}-${Date.now()}`;
 
     if (isGasHostedRuntime()) {
@@ -1373,6 +1462,9 @@ export default function App() {
     nextStatus: BonusClaimStatus;
     comment?: string;
   }): Promise<{ success: boolean; error?: string; message?: string }> => {
+    if (isReadOnly) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     const commandId = `cmd-claim-st-${params.claimId}-${Date.now()}`;
 
     if (isGasHostedRuntime()) {
@@ -1425,6 +1517,7 @@ export default function App() {
   };
 
   const handleUpdateBonusImage = (id: string, imageUrl: string) => {
+    if (isReadOnly) return;
     editVersionsRef.current.bonuses += 1;
     const updated = bonuses.map((b) => (b.id === id ? { ...b, imageUrl } : b));
     setBonuses(updated);
@@ -1433,6 +1526,7 @@ export default function App() {
 
   // Settings & Category / Phrase / Motivational updates
   const handleSaveSettings = async (newSettings: AppSettings) => {
+    if (isReadOnly) return;
     editVersionsRef.current.settings += 1;
     latestStateRef.current.settings = newSettings;
     setSettings(newSettings);
@@ -1462,6 +1556,7 @@ export default function App() {
   };
 
   const handleSaveCategories = async (cats: Category[]) => {
+    if (isReadOnly) return;
     editVersionsRef.current.categories += 1;
     setCategories(cats);
     api.saveCategories(cats);
@@ -1472,6 +1567,7 @@ export default function App() {
   };
 
   const handleSavePhrases = async (ph: Phrase[]) => {
+    if (isReadOnly) return;
     editVersionsRef.current.phrases += 1;
     setPhrases(ph);
     api.savePhrases(ph);
@@ -1482,6 +1578,7 @@ export default function App() {
   };
 
   const handleSaveMotivational = async (mot: MotivationalPhrase[]) => {
+    if (isReadOnly) return;
     editVersionsRef.current.motivationalPhrases += 1;
     setMotivationalPhrases(mot);
     api.saveMotivationalPhrases(mot);
@@ -1496,6 +1593,9 @@ export default function App() {
     employee: Employee,
     isNew: boolean
   ): Promise<{ success: boolean; error?: string }> => {
+    if (isReadOnly) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     editVersionsRef.current.employees += 1;
     if (isGasHostedRuntime()) {
       const res = await api.saveEmployeeRemote({ ...employee, createOnly: isNew });
@@ -1522,6 +1622,9 @@ export default function App() {
     employeeId: string,
     nextStatus: EmployeeStatus
   ): Promise<{ success: boolean; error?: string }> => {
+    if (isReadOnly) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     editVersionsRef.current.employees += 1;
     const target = employees.find((e) => e.id === employeeId);
     if (!target) {
@@ -1558,6 +1661,9 @@ export default function App() {
   const handleSaveRating = async (
     rating: EmployeeRating
   ): Promise<{ success: boolean; error?: string }> => {
+    if (isReadOnly) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     editVersionsRef.current.ratings += 1;
     let savedRating: EmployeeRating = { ...rating, isDemo: false };
 
@@ -1593,6 +1699,7 @@ export default function App() {
     slot: 'avatar' | 'portrait',
     imageUrl: string
   ) => {
+    if (isReadOnly) return;
     editVersionsRef.current.employees += 1;
     const nowIso = new Date().toISOString();
     const updated = employees.map((emp) => {
@@ -1617,6 +1724,9 @@ export default function App() {
 
   // Full manual synchronization (active inside GAS HtmlService with bound spreadsheet)
   const handleSyncGas = async () => {
+    if (isReadOnly) {
+      return { success: false, message: READ_ONLY_ERROR_MESSAGE };
+    }
     const isHostedNow = isGasHostedRuntime();
 
     if (!isHostedNow) {
@@ -1682,12 +1792,58 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header
           onSync={handleSyncGas}
+          onRefreshSheet={handleLoadFromSheet}
           isSyncing={isSyncing}
           syncState={syncState}
           onOpenMobileMenu={() => setIsMobileNavOpen(true)}
         />
 
         <main className="flex-1 overflow-y-auto overflow-x-hidden">
+          {isReadOnly && (
+            <div className="px-4 sm:px-6 pt-4 max-w-[1600px] mx-auto">
+              <div className="bg-bg-1 border border-accent/35 rounded-2xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start sm:items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-accent/15 border border-accent/30 flex items-center justify-center text-accent shrink-0">
+                    <Eye className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-fg flex flex-wrap items-center gap-2">
+                      <span>Режим лише перегляду</span>
+                      <span className="text-[11px] font-normal text-accent">
+                        {syncState.spreadsheetName || shareSession?.spreadsheetId || 'Google Таблиця'}
+                      </span>
+                      <span className="text-[10px] text-gray-2 bg-bg-2 border border-border-default px-2 py-0.5 rounded-lg">
+                        {syncState.readOnlySource === 'gas'
+                          ? 'Джерело: Apps Script (лише читання)'
+                          : 'Джерело: публічна Google Таблиця'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-2 mt-0.5">
+                      Ви переглядаєте таблицю за спільним посиланням. Створення, редагування, видалення, запуск таймера та витрата балів вимкнені.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleLoadFromSheet()}
+                  disabled={isSyncing}
+                  className="px-3.5 py-2 rounded-xl bg-bg-2 hover:bg-border-default border border-border-default text-xs font-semibold text-fg flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shrink-0 whitespace-nowrap"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-accent ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>Оновити дані</span>
+                </button>
+              </div>
+              {syncState.status === 'error' && syncState.errorMessage && (
+                <div
+                  role="alert"
+                  className="mt-2.5 bg-danger/10 border border-danger/30 rounded-2xl px-4 py-3 text-xs text-danger"
+                >
+                  {syncState.errorMessage}
+                </div>
+              )}
+            </div>
+          )}
+
            {currentTab === 'dashboard' && (
             <DashboardView
               entries={entries}
@@ -1700,6 +1856,7 @@ export default function App() {
               motivationalPhrases={motivationalPhrases}
               timerState={timerState}
               syncState={syncState}
+              isReadOnly={isReadOnly}
               onStartTimer={handleStartTimer}
               onPauseTimer={handlePauseTimer}
               onResumeTimer={handleResumeTimer}
@@ -1720,6 +1877,7 @@ export default function App() {
               entries={entries}
               phrases={phrases}
               syncState={syncState}
+              isReadOnly={isReadOnly}
               onStartTimer={handleStartTimer}
               onPauseTimer={handlePauseTimer}
               onResumeTimer={handleResumeTimer}
@@ -1738,6 +1896,7 @@ export default function App() {
               employees={employees}
               selectedEmployeeFilter={employeeFilterId}
               onSelectEmployeeFilter={setEmployeeFilterId}
+              isReadOnly={isReadOnly}
               onAddManualEntry={handleAddManualEntry}
               onUpdateEntry={handleUpdateEntry}
               onDeleteEntry={handleDeleteEntry}
@@ -1753,6 +1912,7 @@ export default function App() {
               employees={employees}
               selectedEmployeeFilter={employeeFilterId}
               onSelectEmployeeFilter={setEmployeeFilterId}
+              isReadOnly={isReadOnly}
               onDeleteEntry={handleDeleteEntry}
               onUpdateEntry={handleUpdateEntry}
             />
@@ -1779,6 +1939,7 @@ export default function App() {
               categories={categories}
               projects={projects}
               syncState={syncState}
+              isReadOnly={isReadOnly}
               onSaveEmployee={handleSaveEmployee}
               onArchiveEmployee={handleArchiveEmployee}
               onSaveRating={handleSaveRating}
@@ -1797,6 +1958,7 @@ export default function App() {
               bonusEligibility={bonusEligibility}
               bonusClaims={bonusClaims}
               syncState={syncState}
+              isReadOnly={isReadOnly}
               onClaimBonusForEmployee={handleClaimBonusForEmployee}
               onTransitionBonusClaim={handleTransitionBonusClaim}
               onUpdateBonusImage={handleUpdateBonusImage}
@@ -1815,6 +1977,7 @@ export default function App() {
               pointsPeriods={pointsPeriods}
               pointsAudit={pointsAudit}
               syncState={syncState}
+              isReadOnly={isReadOnly}
               onAddPointsTransaction={handleAddPointsTransaction}
               onReverseTransaction={handleReversePointsTransaction}
               onEnsureMonthlyAllocations={handleEnsureMonthlyAllocations}
@@ -1826,6 +1989,7 @@ export default function App() {
           {currentTab === 'points-reasons' && (
             <PointsReasonsView
               reasons={pointsReasons}
+              isReadOnly={isReadOnly}
               onSaveReasons={handleSavePointsReasons}
             />
           )}
@@ -1839,6 +2003,7 @@ export default function App() {
               eligibleCategoryIds={settings.pointsEligibleCategoryIds || []}
               bonuses={bonuses}
               eligibilityRules={bonusEligibility}
+              isReadOnly={isReadOnly}
               onSaveRolesAndCategories={handleSavePointsRolesAndCategories}
               onSaveProfiles={handleSavePointsProfiles}
               onSaveEligibility={handleSaveBonusEligibility}
@@ -1857,6 +2022,7 @@ export default function App() {
               motivationalPhrases={motivationalPhrases}
               syncState={syncState}
               isSyncing={isSyncing}
+              isReadOnly={isReadOnly}
               onSaveSettings={handleSaveSettings}
               onSaveCategories={handleSaveCategories}
               onSavePhrases={handleSavePhrases}

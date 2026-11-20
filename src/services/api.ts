@@ -41,7 +41,10 @@ import {
   gasBridge,
   GasConfigPayload,
   GasLoadAllResponse,
+  getReadOnlyShareSession,
   isGasHostedRuntime,
+  isReadOnlyShareMode,
+  READ_ONLY_ERROR_MESSAGE,
 } from './gasBridge';
 import {
   buildImageDiagnostics,
@@ -63,7 +66,7 @@ import { createDefaultPointsRoles } from '../utils/pointsEngine';
 import { normalizeDriveImageUrl } from '../utils/imageUrlValidator';
 import { isStaleLocalAssetPath } from '../utils/assetResolver';
 
-export { isGasHostedRuntime };
+export { getReadOnlyShareSession, isGasHostedRuntime, isReadOnlyShareMode };
 
 const STORAGE_KEYS = {
   ENTRIES: 'allonsy_entries',
@@ -116,6 +119,7 @@ function getStored<T>(key: string, fallback: T): T {
 }
 
 function setStored<T>(key: string, value: T): void {
+  if (isReadOnlyShareMode()) return;
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (e) {
@@ -202,6 +206,39 @@ function cleanKnownEmptyDemoTimerOnce(): ActiveTimerState | null {
 
 export const api = {
   async getAppData() {
+    if (isReadOnlyShareMode()) {
+      return {
+        entries: [] as TimeEntry[],
+        categories: [] as Category[],
+        actionTypes: [] as ActionType[],
+        projects: [] as Project[],
+        bonuses: [] as Bonus[],
+        phrases: [] as Phrase[],
+        motivationalPhrases: [] as MotivationalPhrase[],
+        employees: [] as Employee[],
+        ratings: [] as EmployeeRating[],
+        settings: {
+          ...initialSettings,
+          gasWebAppUrl: undefined,
+          googleSpreadsheetInput: getReadOnlyShareSession()?.spreadsheetInput || undefined,
+          googleSpreadsheetId: getReadOnlyShareSession()?.spreadsheetId || undefined,
+        },
+        timerState: null as ActiveTimerState | null,
+        pendingSync: false,
+        lastSyncedAt: null as string | null,
+        imageRegistry: [] as ImageAsset[],
+        imageAssignments: [] as ImageAssignment[],
+        pointsRoles: createDefaultPointsRoles(),
+        pointsProfiles: [] as EmployeePointsProfile[],
+        pointsReasons: [] as PointsReason[],
+        pointsTransactions: [] as PointsTransaction[],
+        pointsPeriods: [] as PointsPeriod[],
+        bonusEligibility: [] as BonusEligibilityRule[],
+        bonusClaims: [] as BonusClaim[],
+        pointsAudit: null as PointsAuditSummary | null,
+      };
+    }
+
     const rawSettings = getStored<AppSettings>(STORAGE_KEYS.SETTINGS, initialSettings);
     const settings = migrateSettings(rawSettings);
     if (settings.hourlyRate !== rawSettings.hourlyRate || settings.targetHours !== rawSettings.targetHours) {
@@ -309,6 +346,9 @@ export const api = {
   },
 
   async setupSpreadsheet(): Promise<{ success: boolean; message: string; spreadsheetName?: string; spreadsheetId?: string }> {
+    if (isReadOnlyShareMode()) {
+      return { success: false, message: READ_ONLY_ERROR_MESSAGE };
+    }
     if (!isGasHostedRuntime()) {
       return { success: false, message: AI_STUDIO_PREVIEW_SYNC_REASON };
     }
@@ -341,7 +381,10 @@ export const api = {
       };
     }
 
-    const dedupeKey = 'bound-spreadsheet';
+    const shareSession = getReadOnlyShareSession();
+    const dedupeKey = shareSession
+      ? `share:${shareSession.spreadsheetId || shareSession.spreadsheetInput}`
+      : 'bound-spreadsheet';
     if (options?.dedupe) {
       const existing = inFlightRemoteLoads.get(dedupeKey);
       if (existing) {
@@ -439,6 +482,9 @@ export const api = {
   async saveTimeEntryRemote(
     entry: TimeEntry
   ): Promise<{ success: boolean; message?: string; error?: string }> {
+    if (isReadOnlyShareMode()) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     if (!isGasHostedRuntime()) {
       return {
         success: false,
@@ -469,6 +515,9 @@ export const api = {
   async deleteTimeEntryRemote(
     entryId: string
   ): Promise<{ success: boolean; message?: string; error?: string }> {
+    if (isReadOnlyShareMode()) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     const remainingUnsynced = api.getUnsyncedEntryIds().filter((id) => id !== entryId);
     setStored(STORAGE_KEYS.UNSYNCED_ENTRY_IDS, remainingUnsynced);
 
@@ -496,6 +545,9 @@ export const api = {
   async saveConfigRemote(
     configPayload: GasConfigPayload
   ): Promise<{ success: boolean; message?: string; error?: string }> {
+    if (isReadOnlyShareMode()) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     if (!isGasHostedRuntime()) {
       return { success: false, error: AI_STUDIO_PREVIEW_SYNC_REASON };
     }
@@ -522,6 +574,13 @@ export const api = {
   async syncAllWithGas(
     payload: Record<string, any>
   ): Promise<{ success: boolean; message: string; error?: string; spreadsheetName?: string; spreadsheetId?: string }> {
+    if (isReadOnlyShareMode()) {
+      return {
+        success: false,
+        message: READ_ONLY_ERROR_MESSAGE,
+        error: READ_ONLY_ERROR_MESSAGE,
+      };
+    }
     if (!isGasHostedRuntime()) {
       setStored(STORAGE_KEYS.PENDING_SYNC, true);
       return {
@@ -563,6 +622,9 @@ export const api = {
   async saveEmployeeRemote(
     employee: Employee & { createOnly?: boolean }
   ): Promise<{ success: boolean; employee?: Employee; error?: string }> {
+    if (isReadOnlyShareMode()) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     if (!isGasHostedRuntime()) {
       return { success: false, error: AI_STUDIO_PREVIEW_SYNC_REASON };
     }
@@ -581,6 +643,9 @@ export const api = {
   async archiveEmployeeRemote(
     employeeId: string
   ): Promise<{ success: boolean; employee?: Employee; error?: string }> {
+    if (isReadOnlyShareMode()) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     if (!isGasHostedRuntime()) {
       return { success: false, error: AI_STUDIO_PREVIEW_SYNC_REASON };
     }
@@ -598,6 +663,9 @@ export const api = {
   async saveRatingRemote(
     rating: EmployeeRating
   ): Promise<{ success: boolean; rating?: EmployeeRating; error?: string }> {
+    if (isReadOnlyShareMode()) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE };
+    }
     if (!isGasHostedRuntime()) {
       return { success: false, error: AI_STUDIO_PREVIEW_SYNC_REASON };
     }
@@ -711,6 +779,13 @@ export const api = {
   async executePointsCommandRemote(
     command: Record<string, unknown>
   ): Promise<{ success: boolean; code?: string; message?: string; error?: string; data?: any }> {
+    if (isReadOnlyShareMode()) {
+      return {
+        success: false,
+        code: 'READ_ONLY_MODE',
+        error: READ_ONLY_ERROR_MESSAGE,
+      };
+    }
     if (!isGasHostedRuntime()) {
       return {
         success: false,
@@ -742,6 +817,7 @@ export const api = {
   },
 
   getUnsyncedEntryIds(): string[] {
+    if (isReadOnlyShareMode()) return [];
     const stored = getStored<unknown>(STORAGE_KEYS.UNSYNCED_ENTRY_IDS, []);
     return Array.isArray(stored) ? stored.map((v) => String(v || '').trim()).filter(Boolean) : [];
   },
@@ -755,6 +831,9 @@ export const api = {
     remoteEntries: TimeEntry[],
     localEntries: TimeEntry[]
   ): { entries: TimeEntry[]; preservedDraftIds: string[] } {
+    if (isReadOnlyShareMode()) {
+      return { entries: remoteEntries, preservedDraftIds: [] };
+    }
     const unsyncedIds = new Set(api.getUnsyncedEntryIds());
     if (unsyncedIds.size === 0) {
       return { entries: remoteEntries, preservedDraftIds: [] };
@@ -773,6 +852,7 @@ export const api = {
     remoteRegistry: ImageAsset[],
     localRegistry: ImageAsset[]
   ): ImageAsset[] {
+    if (isReadOnlyShareMode()) return remoteRegistry;
     const remoteIds = new Set(remoteRegistry.map((a) => a.id));
     const preservedDrafts = localRegistry.filter(
       (asset) => asset && asset.id && !remoteIds.has(asset.id) && isLocalDraftImageAsset(asset)
@@ -781,6 +861,7 @@ export const api = {
   },
 
   getImageLibrary(): ImageAsset[] {
+    if (isReadOnlyShareMode()) return [];
     return getStored<ImageAsset[]>(STORAGE_KEYS.IMAGE_LIBRARY, []);
   },
 
@@ -790,6 +871,7 @@ export const api = {
   },
 
   getImageRegistry(): ImageAsset[] {
+    if (isReadOnlyShareMode()) return [];
     return getStored<ImageAsset[]>(STORAGE_KEYS.IMAGE_LIBRARY, []);
   },
 
@@ -799,6 +881,7 @@ export const api = {
   },
 
   getImageAssignments(): ImageAssignment[] {
+    if (isReadOnlyShareMode()) return [];
     return getStored<ImageAssignment[]>(STORAGE_KEYS.IMAGE_ASSIGNMENTS, []);
   },
 
@@ -810,6 +893,9 @@ export const api = {
   async saveImageMetadataRemote(
     asset: ImageAsset
   ): Promise<{ success: boolean; message: string; blocked?: boolean; draft?: boolean; error?: string }> {
+    if (isReadOnlyShareMode()) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE, message: READ_ONLY_ERROR_MESSAGE };
+    }
     if (!isGasHostedRuntime()) {
       return {
         success: false,
@@ -863,6 +949,9 @@ export const api = {
   async saveImageAssignmentsRemote(
     assignments: ImageAssignment[]
   ): Promise<{ success: boolean; message: string; blocked?: boolean; draft?: boolean; error?: string }> {
+    if (isReadOnlyShareMode()) {
+      return { success: false, error: READ_ONLY_ERROR_MESSAGE, message: READ_ONLY_ERROR_MESSAGE };
+    }
     if (!isGasHostedRuntime()) {
       return {
         success: false,

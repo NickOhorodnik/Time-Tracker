@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { TimeEntry, Category, ActionType, Project, Employee } from '../types';
-import { History as HistoryIcon, Search, Trash2, Edit3, Calendar, User } from 'lucide-react';
+import { History as HistoryIcon, Search, Trash2, Edit3, Eye, Calendar, User } from 'lucide-react';
 import { filterEntriesByEmployee, getDefaultEmployeeId } from '../utils/teamUtils';
 
 interface HistoryViewProps {
@@ -11,6 +11,7 @@ interface HistoryViewProps {
   employees: Employee[];
   selectedEmployeeFilter?: string;
   onSelectEmployeeFilter?: (employeeId: string) => void;
+  isReadOnly?: boolean;
   onDeleteEntry: (id: string) => void;
   onUpdateEntry: (entry: TimeEntry) => void;
 }
@@ -23,6 +24,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   employees,
   selectedEmployeeFilter = 'all',
   onSelectEmployeeFilter,
+  isReadOnly = false,
   onDeleteEntry,
   onUpdateEntry,
 }) => {
@@ -60,6 +62,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
   const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnly) return;
     if (editingEntry) {
       onUpdateEntry(editingEntry);
       setEditingEntry(null);
@@ -75,7 +78,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             <span>Історія сесій та аудит записів</span>
           </h2>
           <p className="text-xs text-gray-2 mt-1">
-            Керуйте записами часу, фільтруйте за проектами та категоріями, редагуйте або видаляйте помилкові інтервали.
+            {isReadOnly
+              ? 'Переглядайте записи часу та фільтруйте їх за проєктами, категоріями й співробітниками.'
+              : 'Керуйте записами часу, фільтруйте за проектами та категоріями, редагуйте або видаляйте помилкові інтервали.'}
           </p>
         </div>
       </div>
@@ -198,19 +203,21 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                       <button
                         onClick={() => setEditingEntry(entry)}
                         className="p-2 rounded-lg bg-bg-2 hover:bg-border-default border border-border-default text-gray-2 hover:text-fg transition-colors"
-                        title="Редагувати запис"
-                        aria-label="Редагувати запис"
+                        title={isReadOnly ? 'Переглянути деталі' : 'Редагувати запис'}
+                        aria-label={isReadOnly ? 'Переглянути деталі' : 'Редагувати запис'}
                       >
-                        <Edit3 className="w-3.5 h-3.5" />
+                        {isReadOnly ? <Eye className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
                       </button>
-                      <button
-                        onClick={() => onDeleteEntry(entry.id)}
-                        className="p-2 rounded-lg bg-danger/10 hover:bg-danger/20 text-danger transition-colors"
-                        title="Видалити запис"
-                        aria-label="Видалити запис"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {!isReadOnly && (
+                        <button
+                          onClick={() => onDeleteEntry(entry.id)}
+                          className="p-2 rounded-lg bg-danger/10 hover:bg-danger/20 text-danger transition-colors"
+                          title="Видалити запис"
+                          aria-label="Видалити запис"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -296,17 +303,19 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         <button
                           onClick={() => setEditingEntry(entry)}
                           className="p-1.5 rounded-lg bg-bg-2 hover:bg-border-default border border-border-default text-gray-2 hover:text-fg transition-colors"
-                          title="Редагувати запис"
+                          title={isReadOnly ? 'Переглянути деталі' : 'Редагувати запис'}
                         >
-                          <Edit3 className="w-3.5 h-3.5" />
+                          {isReadOnly ? <Eye className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
                         </button>
-                        <button
-                          onClick={() => onDeleteEntry(entry.id)}
-                          className="p-1.5 rounded-lg bg-danger/10 hover:bg-danger/20 text-danger transition-colors"
-                          title="Видалити запис"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {!isReadOnly && (
+                          <button
+                            onClick={() => onDeleteEntry(entry.id)}
+                            className="p-1.5 rounded-lg bg-danger/10 hover:bg-danger/20 text-danger transition-colors"
+                            title="Видалити запис"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -322,7 +331,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-bg-1 border border-border-default rounded-3xl p-4 sm:p-6 w-full max-w-lg space-y-5 sm:space-y-6 shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-border-default pb-4">
-              <h3 className="text-base font-bold text-fg">Редагувати запис часу</h3>
+              <h3 className="text-base font-bold text-fg">
+                {isReadOnly ? 'Деталі запису часу (лише перегляд)' : 'Редагувати запис часу'}
+              </h3>
               <button onClick={() => setEditingEntry(null)} className="text-gray-2 hover:text-fg p-1">✕</button>
             </div>
 
@@ -331,9 +342,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 <label className="text-xs text-gray-2 block mb-1">Дата</label>
                 <input
                   type="date"
+                  disabled={isReadOnly}
                   value={editingEntry.date}
                   onChange={(e) => setEditingEntry({ ...editingEntry, date: e.target.value })}
-                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-75"
                 />
               </div>
 
@@ -342,18 +354,20 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                   <label className="text-xs text-gray-2 block mb-1">Початок</label>
                   <input
                     type="time"
+                    disabled={isReadOnly}
                     value={editingEntry.startTime}
                     onChange={(e) => setEditingEntry({ ...editingEntry, startTime: e.target.value })}
-                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-75"
                   />
                 </div>
                 <div>
                   <label className="text-xs text-gray-2 block mb-1">Кінець</label>
                   <input
                     type="time"
+                    disabled={isReadOnly}
                     value={editingEntry.endTime}
                     onChange={(e) => setEditingEntry({ ...editingEntry, endTime: e.target.value })}
-                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-75"
                   />
                 </div>
               </div>
@@ -362,9 +376,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 <div>
                   <label className="text-xs text-gray-2 block mb-1">Співробітник</label>
                   <select
+                    disabled={isReadOnly}
                     value={editingEntry.employeeId || defaultEmpId}
                     onChange={(e) => setEditingEntry({ ...editingEntry, employeeId: e.target.value })}
-                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-75"
                   >
                     {employees.map((emp) => (
                       <option key={emp.id} value={emp.id}>
@@ -378,9 +393,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                   <label className="text-xs text-gray-2 block mb-1">Тривалість (хвилин)</label>
                   <input
                     type="number"
+                    disabled={isReadOnly}
                     value={editingEntry.durationMinutes}
                     onChange={(e) => setEditingEntry({ ...editingEntry, durationMinutes: Number(e.target.value) })}
-                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-75"
                   />
                 </div>
               </div>
@@ -388,9 +404,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               <div>
                 <label className="text-xs text-gray-2 block mb-1">Пов’язаний співробітник (опційно)</label>
                 <select
+                  disabled={isReadOnly}
                   value={editingEntry.relatedEmployeeId || ''}
                   onChange={(e) => setEditingEntry({ ...editingEntry, relatedEmployeeId: e.target.value || undefined })}
-                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-75"
                 >
                   <option value="">Не вказано</option>
                   {employees.map((emp) => (
@@ -405,9 +422,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 <label className="text-xs text-gray-2 block mb-1">Опис</label>
                 <textarea
                   rows={2}
+                  disabled={isReadOnly}
                   value={editingEntry.description}
                   onChange={(e) => setEditingEntry({ ...editingEntry, description: e.target.value })}
-                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent resize-none"
+                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent resize-none disabled:opacity-75"
                 />
               </div>
 
@@ -417,14 +435,16 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                   onClick={() => setEditingEntry(null)}
                   className="px-4 py-2 rounded-xl bg-bg-2 border border-border-default text-gray-2 hover:text-fg text-xs font-medium"
                 >
-                  Скасувати
+                  {isReadOnly ? 'Закрити' : 'Скасувати'}
                 </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-accent hover:bg-accent/90 text-bg-1 text-xs font-semibold"
-                >
-                  Зберегти зміни
-                </button>
+                {!isReadOnly && (
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-accent hover:bg-accent/90 text-bg-1 text-xs font-semibold"
+                  >
+                    Зберегти зміни
+                  </button>
+                )}
               </div>
             </form>
           </div>

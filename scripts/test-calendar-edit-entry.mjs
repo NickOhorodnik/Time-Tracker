@@ -353,7 +353,8 @@ await runTest('T03: CalendarView exposes clickable edit triggers across month ch
 
   assert.strictEqual(calendarSrc.includes('onUpdateEntry: (entry: TimeEntry) => void'), true);
   assert.strictEqual(calendarSrc.includes('openEditModal(entry)'), true);
-  assert.strictEqual(calendarSrc.includes("editingEntry ? 'Редагувати запис часу' : 'Додати запис часу вручну'"), true);
+  assert.strictEqual(calendarSrc.includes("'Редагувати запис часу'"), true);
+  assert.strictEqual(calendarSrc.includes("'Додати запис часу вручну'"), true);
   assert.strictEqual(calendarSrc.includes('calendar-entry-duration'), true);
   assert.strictEqual(calendarSrc.includes('calendar-entry-notes'), true);
   assert.strictEqual(calendarSrc.includes('manual-related-employee-select'), true);

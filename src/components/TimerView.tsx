@@ -14,6 +14,7 @@ interface TimerViewProps {
   entries: TimeEntry[];
   phrases: Phrase[];
   syncState?: SyncState;
+  isReadOnly?: boolean;
   onStartTimer: (
     categoryId: string,
     actionTypeId: string,
@@ -39,6 +40,7 @@ export const TimerView: React.FC<TimerViewProps> = ({
   entries,
   phrases,
   syncState,
+  isReadOnly = false,
   onStartTimer,
   onPauseTimer,
   onResumeTimer,
@@ -46,6 +48,7 @@ export const TimerView: React.FC<TimerViewProps> = ({
   onUpdateElapsedSeconds,
   onUpdateTimerField,
 }) => {
+  const effectiveReadOnly = isReadOnly || Boolean(syncState?.isReadOnly);
   const defaultEmpId = useMemo(() => getDefaultEmployeeId(employees), [employees]);
   const activeEmployees = useMemo(
     () => employees.filter((emp) => emp.status === 'active'),
@@ -229,7 +232,11 @@ export const TimerView: React.FC<TimerViewProps> = ({
 
             {/* Controls */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 w-full max-w-md pt-2">
-              {timerState?.isRunning ? (
+              {effectiveReadOnly ? (
+                <div className="w-full bg-bg-2 border border-border-default rounded-2xl py-3 px-4 text-xs text-gray-2 text-center">
+                  Запуск і збереження сесій таймера вимкнені в режимі лише перегляду.
+                </div>
+              ) : timerState?.isRunning ? (
                 <>
                   {isPaused ? (
                     <button
@@ -292,9 +299,10 @@ export const TimerView: React.FC<TimerViewProps> = ({
                 </label>
                 <select
                   id="timer-employee-select"
+                  disabled={effectiveReadOnly}
                   value={currentEmployeeId}
                   onChange={(e) => handleFieldChange('employeeId', e.target.value)}
-                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2.5 text-xs text-fg focus:outline-none focus:border-accent"
+                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2.5 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {selectableEmployees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
@@ -310,9 +318,10 @@ export const TimerView: React.FC<TimerViewProps> = ({
                   <span>Проєкт</span>
                 </label>
                 <select
+                  disabled={effectiveReadOnly}
                   value={currentProjectId}
                   onChange={(e) => handleFieldChange('projectId', e.target.value)}
-                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2.5 text-xs text-fg focus:outline-none focus:border-accent"
+                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2.5 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>{p.name} ({p.client})</option>
@@ -327,9 +336,10 @@ export const TimerView: React.FC<TimerViewProps> = ({
                   <span>Категорія</span>
                 </label>
                 <select
+                  disabled={effectiveReadOnly}
                   value={currentCategoryId}
                   onChange={(e) => handleFieldChange('categoryId', e.target.value)}
-                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2.5 text-xs text-fg focus:outline-none focus:border-accent"
+                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2.5 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
@@ -344,9 +354,10 @@ export const TimerView: React.FC<TimerViewProps> = ({
                   <span>Тип дії</span>
                 </label>
                 <select
+                  disabled={effectiveReadOnly}
                   value={currentActionTypeId}
                   onChange={(e) => handleFieldChange('actionTypeId', e.target.value)}
-                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2.5 text-xs text-fg focus:outline-none focus:border-accent"
+                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2.5 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {actionTypes.map((a) => (
                     <option key={a.id} value={a.id}>{a.name}</option>
@@ -363,9 +374,10 @@ export const TimerView: React.FC<TimerViewProps> = ({
               </label>
               <select
                 id="timer-related-employee-select"
+                disabled={effectiveReadOnly}
                 value={currentRelatedEmployeeId}
                 onChange={(e) => handleFieldChange('relatedEmployeeId', e.target.value)}
-                className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2.5 text-xs text-fg focus:outline-none focus:border-accent"
+                className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2.5 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <option value="">Не вказано</option>
                 {employees.map((emp) => (
@@ -384,10 +396,11 @@ export const TimerView: React.FC<TimerViewProps> = ({
               </label>
               <textarea
                 rows={3}
+                disabled={effectiveReadOnly}
                 placeholder="Введіть деталі допомоги колезі, рев'ю чи виправлення помилок..."
                 value={currentDescription}
                 onChange={(e) => handleFieldChange('description', e.target.value)}
-                className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2.5 text-xs text-fg placeholder:text-gray-1 focus:outline-none focus:border-accent resize-none"
+                className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2.5 text-xs text-fg placeholder:text-gray-1 focus:outline-none focus:border-accent resize-none disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
           </div>

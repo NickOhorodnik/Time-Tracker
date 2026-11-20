@@ -38,6 +38,7 @@ interface ImageLibrarySectionProps {
   bonuses: Bonus[];
   employees: Employee[];
   syncState?: SyncState;
+  isReadOnly?: boolean;
   onSaveSettings: (newSettings: AppSettings) => void;
   onUpdateBonusImage: (bonusId: string, imageUrl: string) => void;
   onUpdateEmployeeImage: (employeeId: string, slot: 'avatar' | 'portrait', imageUrl: string) => void;
@@ -65,10 +66,12 @@ export const ImageLibrarySection: React.FC<ImageLibrarySectionProps> = ({
   bonuses,
   employees,
   syncState,
+  isReadOnly = false,
   onSaveSettings,
   onUpdateBonusImage,
   onUpdateEmployeeImage,
 }) => {
+  const effectiveReadOnly = isReadOnly || Boolean(syncState?.isReadOnly);
   const [customAssets, setCustomAssets] = useState<ImageAsset[]>(() => api.getImageRegistry());
   const [assignments, setAssignments] = useState<ImageAssignment[]>(() => api.getImageAssignments());
 
@@ -391,6 +394,7 @@ export const ImageLibrarySection: React.FC<ImageLibrarySectionProps> = ({
 
   // Open modal to add a new URL asset
   const handleOpenAddModal = (presetSlotKey?: string) => {
+    if (effectiveReadOnly) return;
     setEditingAssetId(null);
     setFormUrl('');
     setFormName('');
@@ -404,6 +408,7 @@ export const ImageLibrarySection: React.FC<ImageLibrarySectionProps> = ({
 
   // Open modal to edit an existing URL asset
   const handleOpenEditModal = (asset: ImageAsset) => {
+    if (effectiveReadOnly) return;
     setEditingAssetId(asset.id);
     setFormUrl(asset.url);
     setFormName(asset.name);
@@ -481,6 +486,7 @@ export const ImageLibrarySection: React.FC<ImageLibrarySectionProps> = ({
   // Save new or edited URL asset
   const handleSaveUrlAsset = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (effectiveReadOnly) return;
     const validation = validateImageUrl(formUrl);
     if (!validation.valid) {
       showFeedback('error', validation.error || 'Вкажіть коректне HTTPS-посилання.');
@@ -548,6 +554,7 @@ export const ImageLibrarySection: React.FC<ImageLibrarySectionProps> = ({
 
   // Revert custom alternate slot to inherit primary stage
   const handleResetAlternateToShared = (stageKey: string) => {
+    if (effectiveReadOnly) return;
     const stageNum = Number(stageKey.replace('stage-', ''));
     const updatedStages = settings.stages.map((s) =>
       s.stage === stageNum ? { ...s, alternateImage: s.primaryImage } : s
@@ -574,6 +581,7 @@ export const ImageLibrarySection: React.FC<ImageLibrarySectionProps> = ({
 
   // Delete custom URL asset from library
   const handleDeleteCustomAsset = (assetId: string, assetName: string) => {
+    if (effectiveReadOnly) return;
     const updated = customAssets.filter((a) => a.id !== assetId);
     setCustomAssets(updated);
     api.saveImageRegistry(updated);
@@ -617,19 +625,29 @@ export const ImageLibrarySection: React.FC<ImageLibrarySectionProps> = ({
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={() => handleOpenAddModal()}
-            className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-bg-1 px-4 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors shadow-lg shadow-accent/20 cursor-pointer whitespace-nowrap"
-          >
-            <Plus className="w-4 h-4 shrink-0" />
-            <span>Додати зображення за URL</span>
-          </button>
+          {!effectiveReadOnly && (
+            <button
+              type="button"
+              onClick={() => handleOpenAddModal()}
+              className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-bg-1 px-4 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors shadow-lg shadow-accent/20 cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4 shrink-0" />
+              <span>Додати зображення за URL</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Runtime Environment Explanation Banner */}
-      {!isGasHosted ? (
+      {effectiveReadOnly ? (
+        <div className="bg-bg-2 border border-accent/30 rounded-2xl p-4 flex items-start gap-3">
+          <Lock className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+          <div className="text-xs text-gray-2 leading-relaxed space-y-1">
+            <span className="font-semibold text-fg block">Режим лише перегляду бібліотеки зображень</span>
+            <span>Ви можете переглядати активи, призначені слоти та копіювати URL. Додавання, редагування та перепризначення зображень вимкнено.</span>
+          </div>
+        </div>
+      ) : !isGasHosted ? (
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3">
           <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div className="text-xs text-amber-200 leading-relaxed space-y-1">
@@ -806,13 +824,15 @@ export const ImageLibrarySection: React.FC<ImageLibrarySectionProps> = ({
           <p className="text-xs text-gray-2 max-w-md mx-auto">
             За вказаними фільтрами немає активів. Ви можете додати нове зображення за прямим HTTPS-посиланням.
           </p>
-          <button
-            type="button"
-            onClick={() => handleOpenAddModal()}
-            className="px-4 py-2 rounded-xl bg-accent hover:bg-accent/90 text-bg-1 text-xs font-semibold shadow transition-colors cursor-pointer"
-          >
-            + Додати зображення за URL
-          </button>
+          {!effectiveReadOnly && (
+            <button
+              type="button"
+              onClick={() => handleOpenAddModal()}
+              className="px-4 py-2 rounded-xl bg-accent hover:bg-accent/90 text-bg-1 text-xs font-semibold shadow transition-colors cursor-pointer"
+            >
+              + Додати зображення за URL
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -920,7 +940,7 @@ export const ImageLibrarySection: React.FC<ImageLibrarySectionProps> = ({
                         <div className="text-xs font-bold text-fg truncate" title={asset.name}>
                           {asset.name}
                         </div>
-                        {isCustomUrl && (
+                        {!effectiveReadOnly && isCustomUrl && (
                           <button
                             type="button"
                             onClick={() => handleOpenEditModal(asset)}
@@ -968,6 +988,7 @@ export const ImageLibrarySection: React.FC<ImageLibrarySectionProps> = ({
                 </div>
 
                 {/* Slot Assignment Controls */}
+                {!effectiveReadOnly && (
                 <div className="p-4 pt-0 space-y-2">
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                     <select
@@ -1047,6 +1068,7 @@ export const ImageLibrarySection: React.FC<ImageLibrarySectionProps> = ({
                     )}
                   </div>
                 </div>
+                )}
               </div>
             );
           })}

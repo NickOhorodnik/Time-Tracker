@@ -16,6 +16,7 @@ interface DashboardViewProps {
   motivationalPhrases: any[];
   timerState: ActiveTimerState | null;
   syncState?: SyncState;
+  isReadOnly?: boolean;
   onStartTimer: (
     categoryId: string,
     actionTypeId: string,
@@ -42,6 +43,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   motivationalPhrases,
   timerState,
   syncState,
+  isReadOnly = false,
   onStartTimer,
   onPauseTimer,
   onResumeTimer,
@@ -49,6 +51,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onUpdateTimerField,
   onNavigateTab,
 }) => {
+  const effectiveReadOnly = isReadOnly || Boolean(syncState?.isReadOnly);
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month' | 'all'>('month');
 
   const defaultEmpId = useMemo(() => getDefaultEmployeeId(employees), [employees]);
@@ -276,13 +279,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
 
               <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2.5 sm:gap-3">
-                <button
-                  onClick={() => onNavigateTab('timer')}
-                  className="bg-accent hover:bg-accent/90 text-bg-1 px-4 py-2.5 sm:py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-lg shadow-accent/20 transition-all cursor-pointer whitespace-nowrap"
-                >
-                  <Play className="w-3.5 h-3.5 fill-current shrink-0" />
-                  <span>Керувати таймером</span>
-                </button>
+                {!effectiveReadOnly && (
+                  <button
+                    onClick={() => onNavigateTab('timer')}
+                    className="bg-accent hover:bg-accent/90 text-bg-1 px-4 py-2.5 sm:py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-lg shadow-accent/20 transition-all cursor-pointer whitespace-nowrap"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current shrink-0" />
+                    <span>Керувати таймером</span>
+                  </button>
+                )}
                 <button
                   onClick={() => onNavigateTab('history')}
                   className="bg-bg-2 hover:bg-border-default border border-border-default text-gray-2 hover:text-fg px-4 py-2.5 sm:py-2 rounded-xl text-xs font-medium transition-all cursor-pointer text-center whitespace-nowrap"
@@ -360,14 +365,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <Clock className="w-4 h-4 text-accent shrink-0" />
                 <span>Швидкий запуск таймера</span>
               </div>
-              {timerState?.isRunning && (
+              {effectiveReadOnly ? (
+                <span className="bg-bg-2 border border-border-default text-gray-2 px-2 py-0.5 rounded text-[10px] font-medium shrink-0">
+                  Лише перегляд
+                </span>
+              ) : timerState?.isRunning ? (
                 <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-[10px] font-medium animate-pulse shrink-0">
                   Активно
                 </span>
-              )}
+              ) : null}
             </div>
 
-            {timerState?.isRunning && (
+            {effectiveReadOnly && (
+              <div className="bg-bg-2 border border-border-default rounded-xl p-3 text-[11px] text-gray-2 leading-relaxed">
+                У режимі лише перегляду запуск або зупинка таймера недоступні.
+              </div>
+            )}
+
+            {timerState?.isRunning && !effectiveReadOnly && (
               <div className="space-y-3 bg-bg-2 p-3.5 rounded-xl border border-accent/30">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                   <span className="text-accent font-medium">Сесія триває:</span>
@@ -413,9 +428,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </label>
                 <select
                   id="quick-timer-employee"
+                  disabled={effectiveReadOnly}
                   value={currentTimerEmp}
                   onChange={(e) => handleQuickFieldChange('employeeId', e.target.value)}
-                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {selectableEmployees.map((emp) => (
                     <option key={emp.id} value={emp.id}>{emp.name}{emp.status === 'archived' ? ' (архів)' : ''}</option>
@@ -426,9 +442,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div>
                 <label className="text-[11px] text-gray-2 block mb-1">Проєкт</label>
                 <select
+                  disabled={effectiveReadOnly}
                   value={currentTimerProj}
                   onChange={(e) => handleQuickFieldChange('projectId', e.target.value)}
-                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>{p.name} ({p.client})</option>
@@ -440,9 +457,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div>
                   <label className="text-[11px] text-gray-2 block mb-1">Категорія</label>
                   <select
+                    disabled={effectiveReadOnly}
                     value={currentTimerCat}
                     onChange={(e) => handleQuickFieldChange('categoryId', e.target.value)}
-                    className="w-full bg-bg-2 border border-border-default rounded-xl px-2.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                    className="w-full bg-bg-2 border border-border-default rounded-xl px-2.5 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>{c.name}</option>
@@ -453,9 +471,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div>
                   <label className="text-[11px] text-gray-2 block mb-1">Тип дії</label>
                   <select
+                    disabled={effectiveReadOnly}
                     value={currentTimerAction}
                     onChange={(e) => handleQuickFieldChange('actionTypeId', e.target.value)}
-                    className="w-full bg-bg-2 border border-border-default rounded-xl px-2.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                    className="w-full bg-bg-2 border border-border-default rounded-xl px-2.5 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {actionTypes.map((a) => (
                       <option key={a.id} value={a.id}>{a.name}</option>
@@ -468,15 +487,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <label className="text-[11px] text-gray-2 block mb-1">Опис задачі</label>
                 <input
                   type="text"
+                  disabled={effectiveReadOnly}
                   placeholder="Наприклад: допомога колезі з макетом..."
                   value={currentTimerDesc}
                   onChange={(e) => handleQuickFieldChange('description', e.target.value)}
-                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg placeholder:text-gray-1 focus:outline-none focus:border-accent"
+                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg placeholder:text-gray-1 focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
               {!timerState?.isRunning && (
                 <button
+                  type="button"
+                  disabled={effectiveReadOnly}
                   onClick={() =>
                     onStartTimer(
                       currentTimerCat,
@@ -486,10 +508,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       currentTimerEmp
                     )
                   }
-                  className="w-full bg-accent hover:bg-accent/90 text-bg-1 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-lg shadow-accent/20 transition-all cursor-pointer"
+                  className="w-full bg-accent hover:bg-accent/90 text-bg-1 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-lg shadow-accent/20 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Play className="w-4 h-4 fill-current" />
-                  <span>Запустити таймер</span>
+                  <span>{effectiveReadOnly ? 'Запуск вимкнено (лише перегляд)' : 'Запустити таймер'}</span>
                 </button>
               )}
             </div>

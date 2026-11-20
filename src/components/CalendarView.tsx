@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { TimeEntry, Category, ActionType, Project, Employee } from '../types';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Edit3, Plus, Trash2, User } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Edit3, Eye, Plus, Trash2, User } from 'lucide-react';
 import { filterEntriesByEmployee, getDefaultEmployeeId } from '../utils/teamUtils';
 
 interface CalendarViewProps {
@@ -11,6 +11,7 @@ interface CalendarViewProps {
   employees: Employee[];
   selectedEmployeeFilter?: string;
   onSelectEmployeeFilter?: (employeeId: string) => void;
+  isReadOnly?: boolean;
   onAddManualEntry: (entry: Omit<TimeEntry, 'id'>) => void;
   onUpdateEntry: (entry: TimeEntry) => void;
   onDeleteEntry: (id: string) => void;
@@ -33,6 +34,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   employees,
   selectedEmployeeFilter = 'all',
   onSelectEmployeeFilter,
+  isReadOnly = false,
   onAddManualEntry,
   onUpdateEntry,
   onDeleteEntry,
@@ -93,6 +95,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   const openCreateModal = (prefillDate?: string) => {
+    if (isReadOnly) return;
     setEditingEntry(null);
     setManualDate(prefillDate || new Date().toISOString().split('T')[0]);
     setStartTime('10:00');
@@ -160,6 +163,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
   const handleModalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnly) return;
     if (!manualDate.trim()) {
       setFormError('Оберіть дату запису.');
       return;
@@ -227,7 +231,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             <span>Календар та хронологія роботи</span>
           </h2>
           <p className="text-xs text-gray-2 mt-1">
-            Переглядайте хронологічний розподіл сесій за місяць, тиждень чи день. Натисніть на будь-який запис, щоб відредагувати його.
+            {isReadOnly
+              ? 'Переглядайте хронологічний розподіл сесій за місяць, тиждень чи день. Натисніть на будь-який запис, щоб переглянути деталі.'
+              : 'Переглядайте хронологічний розподіл сесій за місяць, тиждень чи день. Натисніть на будь-який запис, щоб відредагувати його.'}
           </p>
         </div>
 
@@ -262,14 +268,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={() => openCreateModal()}
-            className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-bg-1 px-4 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-lg shadow-accent/20 transition-all cursor-pointer whitespace-nowrap"
-          >
-            <Plus className="w-4 h-4 shrink-0" />
-            <span>Додати запис вручну</span>
-          </button>
+          {!isReadOnly && (
+            <button
+              type="button"
+              onClick={() => openCreateModal()}
+              className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-bg-1 px-4 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-lg shadow-accent/20 transition-all cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4 shrink-0" />
+              <span>Додати запис вручну</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -399,7 +407,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
             {/* Mobile Agenda List for Readable & Clickable Session Details */}
             <div className="sm:hidden space-y-2 pt-2 border-t border-border-default">
-              <div className="text-xs font-semibold text-gray-2">Сесії цього місяця (натисніть для редагування):</div>
+              <div className="text-xs font-semibold text-gray-2">
+                {isReadOnly ? 'Сесії цього місяця (натисніть для перегляду):' : 'Сесії цього місяця (натисніть для редагування):'}
+              </div>
               {filteredEntries.filter((e) => {
                 const monthPrefix = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
                 return e.date.startsWith(monthPrefix);
@@ -494,21 +504,23 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             openEditModal(entry);
                           }}
                           className="text-xs text-gray-2 hover:text-fg px-3 py-1.5 rounded-lg bg-bg-1 border border-border-default hover:border-accent/60 flex items-center gap-1.5 transition-colors cursor-pointer"
-                          aria-label="Редагувати запис"
+                          aria-label={isReadOnly ? 'Деталі запису' : 'Редагувати запис'}
                         >
-                          <Edit3 className="w-3.5 h-3.5" />
-                          <span>Редагувати</span>
+                          {isReadOnly ? <Eye className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
+                          <span>{isReadOnly ? 'Деталі' : 'Редагувати'}</span>
                         </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteEntry(entry.id);
-                          }}
-                          className="text-xs text-danger hover:text-danger/80 px-3 py-1.5 rounded-lg bg-danger/10 transition-colors cursor-pointer"
-                        >
-                          Видалити
-                        </button>
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteEntry(entry.id);
+                            }}
+                            className="text-xs text-danger hover:text-danger/80 px-3 py-1.5 rounded-lg bg-danger/10 transition-colors cursor-pointer"
+                          >
+                            Видалити
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -535,7 +547,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           >
             <div className="flex items-center justify-between border-b border-border-default pb-4">
               <h3 id="calendar-entry-modal-title" className="text-base font-bold text-fg">
-                {editingEntry ? 'Редагувати запис часу' : 'Додати запис часу вручну'}
+                {isReadOnly
+                  ? 'Деталі запису часу (лише перегляд)'
+                  : editingEntry
+                  ? 'Редагувати запис часу'
+                  : 'Додати запис часу вручну'}
               </h3>
               <button
                 type="button"
@@ -556,9 +572,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   <input
                     id="calendar-entry-date"
                     type="date"
+                    disabled={isReadOnly}
                     value={manualDate}
                     onChange={(e) => setManualDate(e.target.value)}
-                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-75"
                   />
                 </div>
 
@@ -568,9 +585,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   </label>
                   <select
                     id="manual-employee-select"
+                    disabled={isReadOnly}
                     value={employeeId}
                     onChange={(e) => setEmployeeId(e.target.value)}
-                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-75"
                   >
                     {selectableEmployees.map((emp) => (
                       <option key={emp.id} value={emp.id}>
@@ -589,9 +607,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   <input
                     id="calendar-entry-start"
                     type="time"
+                    disabled={isReadOnly}
                     value={startTime}
                     onChange={(e) => handleTimeRangeChange(e.target.value, endTime)}
-                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-75"
                   />
                 </div>
                 <div>
@@ -601,9 +620,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   <input
                     id="calendar-entry-end"
                     type="time"
+                    disabled={isReadOnly}
                     value={endTime}
                     onChange={(e) => handleTimeRangeChange(startTime, e.target.value)}
-                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-75"
                   />
                 </div>
                 <div>
@@ -614,9 +634,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     id="calendar-entry-duration"
                     type="number"
                     min={1}
+                    disabled={isReadOnly}
                     value={durationMinutes}
                     onChange={(e) => setDurationMinutes(Math.max(1, Number(e.target.value) || 1))}
-                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                    className="w-full bg-bg-2 border border-border-default rounded-xl px-3 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-75"
                   />
                 </div>
               </div>
@@ -628,9 +649,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   </label>
                   <select
                     id="calendar-entry-project"
+                    disabled={isReadOnly}
                     value={projectId}
                     onChange={(e) => setProjectId(e.target.value)}
-                    className="w-full bg-bg-2 border border-border-default rounded-xl px-2.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                    className="w-full bg-bg-2 border border-border-default rounded-xl px-2.5 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-75"
                   >
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>{p.name}</option>
@@ -644,9 +666,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   </label>
                   <select
                     id="calendar-entry-category"
+                    disabled={isReadOnly}
                     value={categoryId}
                     onChange={(e) => setCategoryId(e.target.value)}
-                    className="w-full bg-bg-2 border border-border-default rounded-xl px-2.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                    className="w-full bg-bg-2 border border-border-default rounded-xl px-2.5 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-75"
                   >
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>{c.name}</option>
@@ -660,9 +683,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   </label>
                   <select
                     id="calendar-entry-action"
+                    disabled={isReadOnly}
                     value={actionTypeId}
                     onChange={(e) => setActionTypeId(e.target.value)}
-                    className="w-full bg-bg-2 border border-border-default rounded-xl px-2.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                    className="w-full bg-bg-2 border border-border-default rounded-xl px-2.5 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-75"
                   >
                     {actionTypes.map((a) => (
                       <option key={a.id} value={a.id}>{a.name}</option>
@@ -677,9 +701,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 </label>
                 <select
                   id="manual-related-employee-select"
+                  disabled={isReadOnly}
                   value={relatedEmployeeId}
                   onChange={(e) => setRelatedEmployeeId(e.target.value)}
-                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent"
+                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg focus:outline-none focus:border-accent disabled:opacity-75"
                 >
                   <option value="">Не вказано</option>
                   {employees.map((emp) => (
@@ -697,10 +722,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 <textarea
                   id="calendar-entry-description"
                   rows={2}
+                  disabled={isReadOnly}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Опис виконаної роботи..."
-                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg placeholder:text-gray-1 focus:outline-none focus:border-accent resize-none"
+                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg placeholder:text-gray-1 focus:outline-none focus:border-accent resize-none disabled:opacity-75"
                 />
               </div>
 
@@ -711,10 +737,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 <input
                   id="calendar-entry-notes"
                   type="text"
+                  disabled={isReadOnly}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Додатковий коментар..."
-                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg placeholder:text-gray-1 focus:outline-none focus:border-accent"
+                  className="w-full bg-bg-2 border border-border-default rounded-xl px-3.5 py-2 text-xs text-fg placeholder:text-gray-1 focus:outline-none focus:border-accent disabled:opacity-75"
                 />
               </div>
 
@@ -728,7 +755,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               )}
 
               <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 pt-2">
-                {editingEntry ? (
+                {editingEntry && !isReadOnly ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -751,14 +778,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     onClick={closeModal}
                     className="px-4 py-2 rounded-xl bg-bg-2 border border-border-default text-gray-2 hover:text-fg text-xs font-medium hover:bg-border-default cursor-pointer"
                   >
-                    Скасувати
+                    {isReadOnly ? 'Закрити' : 'Скасувати'}
                   </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 rounded-xl bg-accent hover:bg-accent/90 text-bg-1 text-xs font-semibold shadow-lg shadow-accent/20 cursor-pointer"
-                  >
-                    {editingEntry ? 'Зберегти зміни' : 'Зберегти запис'}
-                  </button>
+                  {!isReadOnly && (
+                    <button
+                      type="submit"
+                      className="px-5 py-2 rounded-xl bg-accent hover:bg-accent/90 text-bg-1 text-xs font-semibold shadow-lg shadow-accent/20 cursor-pointer"
+                    >
+                      {editingEntry ? 'Зберегти зміни' : 'Зберегти запис'}
+                    </button>
+                  )}
                 </div>
               </div>
             </form>

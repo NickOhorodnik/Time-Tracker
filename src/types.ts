@@ -363,6 +363,8 @@ export interface ImageDiagnostics {
 export interface SyncState {
   status: SyncStatus;
   runtimeMode: 'local_preview' | 'gas_hosted';
+  isReadOnly?: boolean;
+  readOnlySource?: 'gas' | 'public_sheet';
   lastSyncedAt: string | null;
   errorMessage: string | null;
   errorCode?: string | null;

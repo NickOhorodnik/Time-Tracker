@@ -9,8 +9,8 @@
   ],
   "maxPartialCapBytes": 3150000,
   "appsScriptProjectLimitBytes": 52428800,
-  "totalGeneratedHtmlBytes": 3727410,
-  "totalGasProjectBytes": 3900979,
+  "totalGeneratedHtmlBytes": 3757001,
+  "totalGasProjectBytes": 3930570,
   "generatedFiles": [
     {
       "fileName": "Index.html",
@@ -18,7 +18,7 @@
     },
     {
       "fileName": "Styles.html",
-      "bytes": 63090
+      "bytes": 64319
     },
     {
       "fileName": "AssetsManifest.html",
@@ -30,7 +30,7 @@
     },
     {
       "fileName": "AppScript.html",
-      "bytes": 616782
+      "bytes": 645144
     }
   ],
   "assets": [
